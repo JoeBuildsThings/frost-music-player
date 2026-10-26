@@ -62,7 +62,7 @@ import com.joebuildsthings.frost.ui.theme.glassFlat
 fun FoldersPage(vm: FrostViewModel, state: LazyListState, bottomPad: Dp, topPad: Dp, onOpen: (Overlay) -> Unit) {
     val folders = vm.folders
     if (folders.isEmpty()) {
-        EmptyNote("No folders yet", "Folders appear once Frost finds songs on this phone.")
+        EmptyNote("No folders yet", "Nothing here yet.")
     } else {
         LazyColumn(
             state = state,

@@ -23,7 +23,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -78,10 +80,37 @@ fun PlaylistsPage(vm: FrostViewModel, state: LazyListState, bottomPad: Dp, topPa
                 IconBlock(Icons.Rounded.Favorite)
             }
         }
+        item(key = "recent") {
+            ListRow(
+                title = "Recently played",
+                subtitle = "${vm.recent.size} songs",
+                onClick = { onOpen(Overlay.Detail(DetailSource.Recent)) }
+            ) {
+                IconBlock(FrostIcons.Timer)
+            }
+        }
+        item(key = "most") {
+            ListRow(
+                title = "Most played",
+                subtitle = "",
+                onClick = { onOpen(Overlay.Detail(DetailSource.MostPlayed)) }
+            ) {
+                IconBlock(Icons.Rounded.Star)
+            }
+        }
+        item(key = "added") {
+            ListRow(
+                title = "Recently added",
+                subtitle = "",
+                onClick = { onOpen(Overlay.Detail(DetailSource.Added)) }
+            ) {
+                IconBlock(Icons.Rounded.DateRange)
+            }
+        }
         item(key = "new") {
             ListRow(
                 title = "New playlist",
-                subtitle = "Start an empty list",
+                subtitle = "",
                 onClick = { creating = true }
             ) {
                 IconBlock(Icons.Rounded.Add)

@@ -1,6 +1,10 @@
 package com.joebuildsthings.frost.ui.pages
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.rememberScrollState
+import com.joebuildsthings.frost.ui.Chip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -64,7 +68,7 @@ fun SongsPage(vm: FrostViewModel, state: LazyListState, bottomPad: Dp, topPad: D
     var menuTrack by remember { mutableStateOf<Track?>(null) }
 
     if (tracks.isEmpty()) {
-        EmptyNote("No songs found", "Add music to this phone, then scan again.", "Scan again") { vm.scan() }
+        EmptyNote("No songs found", "Add music, then scan again.", "Scan again") { vm.scan() }
     } else {
         LazyColumn(
             state = state,
@@ -74,10 +78,21 @@ fun SongsPage(vm: FrostViewModel, state: LazyListState, bottomPad: Dp, topPad: D
             item(key = "actions") {
                 PlayRow(onPlay = { vm.play(tracks, 0) }, onShuffle = { vm.shuffleAll(tracks) })
             }
+            item(key = "sort") {
+                Row(
+                    Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Chip("A to Z", vm.sortMode == 0) { vm.updateSort(0) }
+                    Chip("Recent", vm.sortMode == 1) { vm.updateSort(1) }
+                    Chip("Artist", vm.sortMode == 2) { vm.updateSort(2) }
+                }
+            }
             itemsIndexed(tracks, key = { _, t -> t.id }) { index, track ->
                 TrackRow(
                     track = track,
                     active = track.id == vm.current?.id,
+                    playing = vm.playWhenReady,
                     favorite = track.id in vm.favorites,
                     onClick = { vm.play(tracks, index) },
                     onMore = { menuTrack = track }

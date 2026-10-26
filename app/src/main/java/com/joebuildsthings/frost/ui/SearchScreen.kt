@@ -135,14 +135,14 @@ fun SearchScreen(vm: FrostViewModel, bottomPad: Dp, onBack: () -> Unit, onOpen: 
 
         if (q.isEmpty()) {
             Text(
-                "Type to search your library.",
+                "",
                 color = InkMuted,
                 fontSize = 14.sp,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
             )
         } else if (songs.isEmpty() && albums.isEmpty() && artists.isEmpty()) {
             Text(
-                "No matches for that search.",
+                "No results",
                 color = InkMuted,
                 fontSize = 14.sp,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
@@ -182,6 +182,7 @@ fun SearchScreen(vm: FrostViewModel, bottomPad: Dp, onBack: () -> Unit, onOpen: 
                         TrackRow(
                             track = track,
                             active = track.id == vm.current?.id,
+                            playing = vm.playWhenReady,
                             favorite = track.id in vm.favorites,
                             onClick = { vm.play(songs, index) },
                             onMore = { menuTrack = track }

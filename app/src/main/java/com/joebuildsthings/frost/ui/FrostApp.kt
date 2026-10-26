@@ -145,11 +145,11 @@ fun FrostApp(vm: FrostViewModel) {
 
     LifecycleResumeEffect(Unit) {
         granted = hasPermission(context, AUDIO_PERMISSION)
-        onPauseOrDispose { }
+        onPauseOrDispose { vm.saveSession() }
     }
 
     LaunchedEffect(granted) {
-        if (granted && !vm.scanned) vm.scan()
+        if (granted) vm.scan()
         if (granted && Build.VERSION.SDK_INT >= 33 && !askedNotifications &&
             !hasPermission(context, Manifest.permission.POST_NOTIFICATIONS)
         ) {
@@ -252,7 +252,7 @@ fun FrostApp(vm: FrostViewModel) {
         if (headerShown) {
             GlassHeader(
                 title = TabLabels[tab],
-                subtitle = if (vm.scanned) subtitleFor(vm, tab) else "Your music, no strings.",
+                subtitle = if (vm.scanned) subtitleFor(vm, tab) else "",
                 hazeState = hazeState,
                 onSearch = { push(Overlay.Search) },
                 onSettings = { push(Overlay.Settings) },
@@ -288,15 +288,15 @@ fun FrostApp(vm: FrostViewModel) {
 @Composable
 private fun PermissionGate(asked: Boolean, onAllow: () -> Unit, onSettings: () -> Unit) {
     Column(Modifier.fillMaxSize()) {
-        Header("Songs", "Your music, no strings.", null, null)
+        Header("Songs", "", null, null)
         StateCard(
             modifier = Modifier.weight(1f),
             icon = FrostIcons.MusicNote,
-            title = "See your music here",
+            title = "Music access",
             body = if (asked) {
-                "Access was denied. Allow music access in settings so Frost can build your library."
+                "Access denied. Allow it in settings."
             } else {
-                "Frost reads audio files stored on this phone to build your library."
+                "Allow access to your music."
             }
         ) {
             if (asked) {
@@ -328,8 +328,8 @@ private fun Shell(
                     .fillMaxSize()
                     .padding(top = topPad),
                 icon = FrostIcons.MusicNote,
-                title = "Scanning your library",
-                body = "Looking for songs on this phone."
+                title = "Scanning",
+                body = "One moment."
             ) {
                 CircularProgressIndicator(color = Accent, strokeWidth = 3.dp, modifier = Modifier.size(28.dp))
             }
@@ -380,7 +380,7 @@ private fun Header(title: String, subtitle: String, onSearch: (() -> Unit)?, onS
         Column(Modifier.weight(1f)) {
             Text("FROST", color = Accent, fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold)
             Text(title, color = Ink, fontSize = 30.sp, fontWeight = FontWeight.Bold)
-            Text(subtitle, color = InkMuted, fontSize = 13.sp)
+            if (subtitle.isNotEmpty()) Text(subtitle, color = InkMuted, fontSize = 13.sp)
         }
         if (onSearch != null) IconCircle(Icons.Rounded.Search, "Search", onSearch)
         if (onSearch != null && onSettings != null) Spacer(Modifier.width(8.dp))
@@ -516,7 +516,7 @@ private fun MiniPlayer(vm: FrostViewModel, hazeState: HazeState, padNav: Boolean
                 .clickable { vm.togglePlay() },
             contentAlignment = Alignment.Center
         ) {
-            Crossfade(targetState = vm.isPlaying, animationSpec = tween(160), label = "miniplay") { playing ->
+            Crossfade(targetState = vm.playWhenReady, animationSpec = tween(160), label = "miniplay") { playing ->
                 Icon(
                     if (playing) FrostIcons.Pause else FrostIcons.Play,
                     contentDescription = if (playing) "Pause" else "Play",

@@ -13,7 +13,8 @@ data class Track(
     val trackNo: Int,
     val durationMs: Long,
     val folder: String,
-    val uri: Uri
+    val uri: Uri,
+    val addedAt: Long = 0L
 )
 
 @Immutable

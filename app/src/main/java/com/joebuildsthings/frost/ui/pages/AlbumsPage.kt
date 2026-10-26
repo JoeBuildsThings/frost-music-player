@@ -62,7 +62,7 @@ import com.joebuildsthings.frost.ui.theme.glassFlat
 fun AlbumsPage(vm: FrostViewModel, state: LazyGridState, bottomPad: Dp, topPad: Dp, onOpen: (Overlay) -> Unit) {
     val albums = vm.albums
     if (albums.isEmpty()) {
-        EmptyNote("No albums yet", "Albums appear once Frost finds songs on this phone.")
+        EmptyNote("No albums yet", "Nothing here yet.")
     } else {
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),

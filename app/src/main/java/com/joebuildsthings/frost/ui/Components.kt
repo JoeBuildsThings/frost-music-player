@@ -1,13 +1,23 @@
 package com.joebuildsthings.frost.ui
 
+import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -37,6 +47,7 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -96,9 +107,8 @@ fun Art(
 ) {
     val context = LocalContext.current
     val art by produceState<Bitmap?>(ArtCache.peek(albumId, requestPx), albumId, requestPx) {
-        if (value == null) {
-            value = withContext(Dispatchers.IO) { ArtCache.load(context, albumId, requestPx) }
-        }
+        value = ArtCache.peek(albumId, requestPx)
+            ?: withContext(Dispatchers.IO) { ArtCache.load(context, albumId, requestPx) }
     }
     val image = remember(art) { art?.asImageBitmap() }
     Box(
@@ -233,17 +243,32 @@ fun TrackRow(
     active: Boolean,
     favorite: Boolean,
     onClick: () -> Unit,
-    onMore: () -> Unit
+    onMore: () -> Unit,
+    playing: Boolean = false
 ) {
     Row(
         Modifier
             .fillMaxWidth()
             .glassFlat()
+            .background(if (active) AccentTint else Color.Transparent)
             .clickable(onClick = onClick)
             .padding(start = 10.dp, top = 8.dp, bottom = 8.dp, end = 2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Art(track.albumId, 128, Modifier.size(48.dp), 14.dp)
+        Box(Modifier.size(48.dp)) {
+            Art(track.albumId, 128, Modifier.size(48.dp), 14.dp)
+            if (active) {
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0x66000000)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    EqBars(playing)
+                }
+            }
+        }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(
@@ -300,13 +325,15 @@ fun ListRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            Text(
-                subtitle,
-                color = InkMuted,
-                fontSize = 12.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            if (subtitle.isNotEmpty()) {
+                Text(
+                    subtitle,
+                    color = InkMuted,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
         if (onMore != null) {
             IconButton(onClick = onMore) {
@@ -455,6 +482,7 @@ fun TrackMenu(track: Track, vm: FrostViewModel, onDismiss: () -> Unit, playlistI
     var picking by remember { mutableStateOf(false) }
     var naming by remember { mutableStateOf(false) }
     val favorite = track.id in vm.favorites
+    val context = LocalContext.current
 
     if (naming) {
         NameDialog(
@@ -507,6 +535,10 @@ fun TrackMenu(track: Track, vm: FrostViewModel, onDismiss: () -> Unit, playlistI
                 onDismiss()
             }
             MenuItem("Add to playlist", Icons.Rounded.Add) { picking = true }
+            MenuItem("Share", Icons.Rounded.Share) {
+                shareTrack(context, track)
+                onDismiss()
+            }
             if (playlistId != null) {
                 MenuItem("Remove from this playlist", Icons.Rounded.Delete) {
                     vm.removeFromPlaylist(playlistId, track.id)
@@ -554,9 +586,8 @@ fun SleepChips(vm: FrostViewModel) {
 fun ArtBackdrop(albumId: Long, requestPx: Int, modifier: Modifier) {
     val context = LocalContext.current
     val art by produceState<Bitmap?>(ArtCache.peek(albumId, requestPx), albumId, requestPx) {
-        if (value == null) {
-            value = withContext(Dispatchers.IO) { ArtCache.load(context, albumId, requestPx) }
-        }
+        value = ArtCache.peek(albumId, requestPx)
+            ?: withContext(Dispatchers.IO) { ArtCache.load(context, albumId, requestPx) }
     }
     val image = remember(art) { art?.asImageBitmap() }
     if (image != null) {
@@ -581,4 +612,78 @@ fun Modifier.pressScale(source: InteractionSource, pressedScale: Float = 0.93f):
         scaleX = scale
         scaleY = scale
     }
+}
+
+@Composable
+fun EqBars(playing: Boolean) {
+    val transition = rememberInfiniteTransition(label = "eq")
+    val a by transition.animateFloat(
+        initialValue = 0.25f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(520), RepeatMode.Reverse),
+        label = "a"
+    )
+    val b by transition.animateFloat(
+        initialValue = 0.25f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(380), RepeatMode.Reverse),
+        label = "b"
+    )
+    val c by transition.animateFloat(
+        initialValue = 0.25f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(460), RepeatMode.Reverse),
+        label = "c"
+    )
+    Canvas(Modifier.size(20.dp)) {
+        val w = size.width / 5f
+        val heights = if (playing) floatArrayOf(a, b, c) else floatArrayOf(0.35f, 0.6f, 0.45f)
+        for (i in 0 until 3) {
+            val h = size.height * heights[i]
+            drawRoundRect(
+                color = Color.White,
+                topLeft = Offset(w * (i * 2), size.height - h),
+                size = Size(w, h),
+                cornerRadius = CornerRadius(w / 2f)
+            )
+        }
+    }
+}
+
+@Composable
+fun TextCircle(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    active: Boolean = false,
+    size: Dp = 44.dp
+) {
+    val source = remember { MutableInteractionSource() }
+    Box(
+        modifier
+            .pressScale(source)
+            .size(size)
+            .clip(CircleShape)
+            .background(if (active) Accent else GlassFlat)
+            .border(1.dp, if (active) Accent else GlassEdgeFade, CircleShape)
+            .clickable(interactionSource = source, indication = LocalIndication.current, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            label,
+            color = if (active) Color.White else Ink,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1
+        )
+    }
+}
+
+fun shareTrack(context: Context, track: Track) {
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "audio/*"
+        putExtra(Intent.EXTRA_STREAM, track.uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    context.startActivity(Intent.createChooser(intent, null))
 }

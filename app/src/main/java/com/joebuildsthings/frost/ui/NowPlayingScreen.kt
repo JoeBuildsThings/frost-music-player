@@ -33,6 +33,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Slider
@@ -76,6 +78,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun NowPlayingScreen(vm: FrostViewModel, glowColors: List<Color>?, onBack: () -> Unit) {
     val track = vm.current
+    val context = LocalContext.current
     var showQueue by remember { mutableStateOf(false) }
     var showSleep by remember { mutableStateOf(false) }
     var position by remember { mutableLongStateOf(0L) }
@@ -84,7 +87,7 @@ fun NowPlayingScreen(vm: FrostViewModel, glowColors: List<Color>?, onBack: () ->
     val hazeState = rememberHazeState()
     val panelShape = RoundedCornerShape(32.dp)
     val artScale by animateFloatAsState(
-        targetValue = if (vm.isPlaying) 1f else 0.92f,
+        targetValue = if (vm.playWhenReady) 1f else 0.92f,
         animationSpec = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessLow),
         label = "art"
     )
@@ -238,7 +241,7 @@ fun NowPlayingScreen(vm: FrostViewModel, glowColors: List<Color>?, onBack: () ->
                             .clickable(interactionSource = playSource, indication = LocalIndication.current) { vm.togglePlay() },
                         contentAlignment = Alignment.Center
                     ) {
-                        Crossfade(targetState = vm.isPlaying, animationSpec = tween(180), label = "playpause") { playing ->
+                        Crossfade(targetState = vm.playWhenReady, animationSpec = tween(180), label = "playpause") { playing ->
                             Icon(
                                 if (playing) FrostIcons.Pause else FrostIcons.Play,
                                 contentDescription = if (playing) "Pause" else "Play",
@@ -259,16 +262,25 @@ fun NowPlayingScreen(vm: FrostViewModel, glowColors: List<Color>?, onBack: () ->
                 }
 
                 Spacer(Modifier.height(14.dp))
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
                     val favorite = track != null && track.id in vm.favorites
-                    GhostButton(
-                        if (favorite) "Favorited" else "Favorite",
+                    IconCircle(
+                        if (favorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                        "Favorite",
                         { if (track != null) vm.toggleFavorite(track.id) },
-                        Modifier.weight(1f),
-                        if (favorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder
+                        active = favorite
                     )
-                    Spacer(Modifier.width(10.dp))
-                    SleepButton(vm, Modifier.weight(1f)) { showSleep = true }
+                    SleepCircle(vm) { showSleep = true }
+                    TextCircle(speedLabel(vm.speed), { vm.cycleSpeed() }, active = vm.speed != 1f)
+                    IconCircle(
+                        Icons.Rounded.Share,
+                        "Share",
+                        { if (track != null) shareTrack(context, track) }
+                    )
                 }
             }
         }
@@ -277,8 +289,6 @@ fun NowPlayingScreen(vm: FrostViewModel, glowColors: List<Color>?, onBack: () ->
     if (showSleep) {
         GlassDialog(onDismiss = { showSleep = false }) {
             DialogTitle("Sleep timer")
-            Spacer(Modifier.height(4.dp))
-            Text("Music pauses when time is up.", color = InkMuted, fontSize = 14.sp)
             Spacer(Modifier.height(14.dp))
             SleepChips(vm)
             Spacer(Modifier.height(16.dp))
@@ -351,5 +361,25 @@ private fun QueueRow(track: Track, active: Boolean, onClick: () -> Unit) {
                 overflow = TextOverflow.Ellipsis
             )
         }
+    }
+}
+
+private fun speedLabel(s: Float): String =
+    if (s == s.toInt().toFloat()) "${s.toInt()}x" else "${s}x"
+
+@Composable
+private fun SleepCircle(vm: FrostViewModel, onClick: () -> Unit) {
+    val end = vm.sleepEndsAt
+    if (end == 0L) {
+        IconCircle(FrostIcons.Timer, "Sleep timer", onClick)
+    } else {
+        val now by produceState(System.currentTimeMillis(), end) {
+            while (true) {
+                value = System.currentTimeMillis()
+                delay(1000L)
+            }
+        }
+        val left = ((end - now) / 1000L).coerceAtLeast(0L)
+        TextCircle("%d:%02d".format(left / 60L, left % 60L), onClick, active = true)
     }
 }

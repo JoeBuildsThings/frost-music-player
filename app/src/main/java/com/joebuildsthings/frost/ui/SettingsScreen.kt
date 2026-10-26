@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -25,6 +24,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -36,6 +37,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -63,6 +65,12 @@ private fun openBatterySettings(context: Context) {
     }
 }
 
+private fun freqLabel(hz: Int): String {
+    if (hz < 1000) return "$hz"
+    val k = hz / 1000f
+    return if (k == k.toInt().toFloat()) "${k.toInt()}k" else "${(k * 10).toInt() / 10f}k"
+}
+
 @Composable
 private fun SettingsCard(title: String, content: @Composable ColumnScope.() -> Unit) {
     Column(
@@ -70,10 +78,33 @@ private fun SettingsCard(title: String, content: @Composable ColumnScope.() -> U
             .fillMaxWidth()
             .glass(RoundedCornerShape(24.dp))
             .padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(title, color = Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
         content()
+    }
+}
+
+@Composable
+private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            label,
+            color = Ink,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.weight(1f)
+        )
+        Switch(
+            checked = checked,
+            onCheckedChange = onChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = Accent,
+                uncheckedThumbColor = Color.White,
+                uncheckedTrackColor = AccentTint
+            )
+        )
     }
 }
 
@@ -88,6 +119,11 @@ fun SettingsScreen(vm: FrostViewModel, bottomPad: Dp, onBack: () -> Unit) {
             ""
         }
     }
+    val sliderColors = SliderDefaults.colors(
+        thumbColor = Accent,
+        activeTrackColor = Accent,
+        inactiveTrackColor = AccentTint
+    )
 
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         Row(
@@ -106,35 +142,58 @@ fun SettingsScreen(vm: FrostViewModel, bottomPad: Dp, onBack: () -> Unit) {
         ) {
             item(key = "playback") {
                 SettingsCard("Playback") {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("Keep playing during games", color = Ink, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                    SwitchRow("Keep playing during games", vm.keepPlaying) { vm.updateKeepPlaying(it) }
+                    GhostButton("Battery settings", { openBatterySettings(context) }, Modifier.fillMaxWidth())
+                }
+            }
+            if (vm.eqFreqs.isNotEmpty() && vm.eqMax > vm.eqMin) {
+                item(key = "eq") {
+                    SettingsCard("Equalizer") {
+                        SwitchRow("Enabled", vm.eqOn) { vm.updateEqOn(it) }
+                        Row(
+                            Modifier.horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Chip("Flat", false) { vm.applyEqPreset(0) }
+                            Chip("Bass", false) { vm.applyEqPreset(1) }
+                            Chip("Vocal", false) { vm.applyEqPreset(2) }
+                            Chip("Treble", false) { vm.applyEqPreset(3) }
+                        }
+                        vm.eqFreqs.forEachIndexed { i, hz ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    freqLabel(hz),
+                                    color = InkMuted,
+                                    fontSize = 12.sp,
+                                    textAlign = TextAlign.End,
+                                    modifier = Modifier.width(40.dp)
+                                )
+                                Slider(
+                                    value = (vm.eqLevels.getOrNull(i) ?: 0).toFloat(),
+                                    onValueChange = { vm.updateEqBand(i, it.toInt()) },
+                                    valueRange = vm.eqMin.toFloat()..vm.eqMax.toFloat(),
+                                    colors = sliderColors,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                "Music carries on when a game or another app starts its own sound.",
+                                "Bass",
                                 color = InkMuted,
-                                fontSize = 13.sp,
-                                lineHeight = 18.sp
+                                fontSize = 12.sp,
+                                textAlign = TextAlign.End,
+                                modifier = Modifier.width(40.dp)
+                            )
+                            Slider(
+                                value = vm.bass.toFloat(),
+                                onValueChange = { vm.updateBass(it.toInt()) },
+                                valueRange = 0f..1000f,
+                                colors = sliderColors,
+                                modifier = Modifier.weight(1f)
                             )
                         }
-                        Spacer(Modifier.width(12.dp))
-                        Switch(
-                            checked = vm.keepPlaying,
-                            onCheckedChange = { vm.updateKeepPlaying(it) },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = Accent,
-                                uncheckedThumbColor = Color.White,
-                                uncheckedTrackColor = AccentTint
-                            )
-                        )
                     }
-                    Text(
-                        "Some phones close music apps to free memory while you game. Set Frost to unrestricted in battery settings so it stays alive.",
-                        color = InkMuted,
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp
-                    )
-                    GhostButton("Open battery settings", { openBatterySettings(context) }, Modifier.fillMaxWidth())
                 }
             }
             item(key = "library") {
@@ -148,25 +207,20 @@ fun SettingsScreen(vm: FrostViewModel, bottomPad: Dp, onBack: () -> Unit) {
                         Chip("30 seconds", vm.minSeconds == 30) { vm.updateMinSeconds(30) }
                         Chip("60 seconds", vm.minSeconds == 60) { vm.updateMinSeconds(60) }
                     }
-                    Spacer(Modifier.height(2.dp))
-                    GhostButton("Scan again", { vm.scan() }, Modifier.fillMaxWidth())
+                    GhostButton(
+                        if (vm.refreshing) "Scanning" else "Scan again",
+                        { vm.scan() },
+                        Modifier.fillMaxWidth()
+                    )
                 }
             }
             item(key = "sleep") {
                 SettingsCard("Sleep timer") {
-                    Text("Pause playback after a set time.", color = InkMuted, fontSize = 13.sp)
                     SleepChips(vm)
                 }
             }
             item(key = "folders_head") {
-                SettingsCard("Hidden folders") {
-                    Text(
-                        "Turn a folder on to keep its songs out of your library, such as voice notes or call recordings.",
-                        color = InkMuted,
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp
-                    )
-                }
+                SectionTitle("HIDDEN FOLDERS")
             }
             items(vm.allFolders, key = { "f_" + it.path }) { folder ->
                 val hidden = folder.path in vm.excluded
@@ -202,17 +256,6 @@ fun SettingsScreen(vm: FrostViewModel, bottomPad: Dp, onBack: () -> Unit) {
                     )
                 }
             }
-            item(key = "about") {
-                SettingsCard("About") {
-                    Text("Frost Music Player $version", color = Ink, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                    Text(
-                        "Frost plays songs stored on this phone. It has no internet permission, and your favorites and playlists stay on this device.",
-                        color = InkMuted,
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp
-                    )
-                }
-            }
             item(key = "github") {
                 Row(
                     Modifier
@@ -229,6 +272,15 @@ fun SettingsScreen(vm: FrostViewModel, bottomPad: Dp, onBack: () -> Unit) {
                         Text("github.com/JoeBuildsThings", color = InkMuted, fontSize = 13.sp)
                     }
                 }
+            }
+            item(key = "version") {
+                Text(
+                    "Frost Music Player $version",
+                    color = InkMuted,
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }

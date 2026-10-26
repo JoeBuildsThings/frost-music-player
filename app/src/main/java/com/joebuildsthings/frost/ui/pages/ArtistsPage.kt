@@ -62,7 +62,7 @@ import com.joebuildsthings.frost.ui.theme.glassFlat
 fun ArtistsPage(vm: FrostViewModel, state: LazyListState, bottomPad: Dp, topPad: Dp, onOpen: (Overlay) -> Unit) {
     val artists = vm.artists
     if (artists.isEmpty()) {
-        EmptyNote("No artists yet", "Artists appear once Frost finds songs on this phone.")
+        EmptyNote("No artists yet", "Nothing here yet.")
     } else {
         LazyColumn(
             state = state,

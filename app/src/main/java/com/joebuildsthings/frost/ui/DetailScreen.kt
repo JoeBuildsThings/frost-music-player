@@ -73,6 +73,22 @@ private fun resolveDetail(source: DetailSource, vm: FrostViewModel): DetailInfo 
         val list = vm.tracks.filter { it.id in vm.favorites }
         DetailInfo("Favorites", "${list.size} songs", list, list.firstOrNull()?.albumId ?: 0L)
     }
+    DetailSource.Recent -> {
+        val byId = vm.tracks.associateBy { it.id }
+        val list = vm.recent.mapNotNull { byId[it] }
+        DetailInfo("Recently played", "${list.size} songs", list, list.firstOrNull()?.albumId ?: 0L)
+    }
+    DetailSource.MostPlayed -> {
+        val list = vm.tracks
+            .filter { (vm.plays[it.id] ?: 0) > 0 }
+            .sortedByDescending { vm.plays[it.id] ?: 0 }
+            .take(50)
+        DetailInfo("Most played", "${list.size} songs", list, list.firstOrNull()?.albumId ?: 0L)
+    }
+    DetailSource.Added -> {
+        val list = vm.tracks.sortedByDescending { it.addedAt }.take(100)
+        DetailInfo("Recently added", "${list.size} songs", list, list.firstOrNull()?.albumId ?: 0L)
+    }
 }
 
 @Composable
@@ -133,6 +149,7 @@ fun DetailScreen(source: DetailSource, vm: FrostViewModel, bottomPad: Dp, onBack
                     TrackRow(
                         track = track,
                         active = track.id == vm.current?.id,
+                        playing = vm.playWhenReady,
                         favorite = track.id in vm.favorites,
                         onClick = { vm.play(tracks, index) },
                         onMore = { menuTrack = track }

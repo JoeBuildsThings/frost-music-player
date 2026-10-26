@@ -28,7 +28,8 @@ object MediaStoreRepository {
             MediaStore.Audio.Media.ALBUM_ID,
             MediaStore.Audio.Media.TRACK,
             MediaStore.Audio.Media.DURATION,
-            MediaStore.Audio.Media.DATA
+            MediaStore.Audio.Media.DATA,
+            MediaStore.Audio.Media.DATE_ADDED
         )
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
         val found = ArrayList<Track>()
@@ -42,6 +43,7 @@ object MediaStoreRepository {
             val trackCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TRACK)
             val durationCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
             val dataCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
+            val addedCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
 
             while (c.moveToNext()) {
                 val id = c.getLong(idCol)
@@ -56,7 +58,8 @@ object MediaStoreRepository {
                         trackNo = c.getInt(trackCol) % 1000,
                         durationMs = c.getLong(durationCol),
                         folder = path.substringBeforeLast('/', ""),
-                        uri = ContentUris.withAppendedId(collection, id)
+                        uri = ContentUris.withAppendedId(collection, id),
+                        addedAt = c.getLong(addedCol)
                     )
                 )
             }

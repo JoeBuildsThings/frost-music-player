@@ -6,6 +6,9 @@ sealed interface DetailSource {
     data class Folder(val path: String) : DetailSource
     data class Playlist(val id: String) : DetailSource
     data object Favorites : DetailSource
+    data object Recent : DetailSource
+    data object MostPlayed : DetailSource
+    data object Added : DetailSource
 }
 
 sealed interface Overlay {
