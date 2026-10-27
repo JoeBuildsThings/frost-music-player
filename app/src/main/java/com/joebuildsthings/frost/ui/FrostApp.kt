@@ -149,7 +149,7 @@ fun FrostApp(vm: FrostViewModel) {
 
     LifecycleResumeEffect(Unit) {
         granted = hasPermission(context, AUDIO_PERMISSION)
-        onPauseOrDispose { vm.saveSession() }
+        onPauseOrDispose { }
     }
 
     LaunchedEffect(granted) {

@@ -3,6 +3,8 @@ package com.joebuildsthings.frost.playback
 import android.content.ContentUris
 import android.content.Intent
 import android.content.SharedPreferences
+import android.os.Handler
+import android.os.Looper
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
 import android.provider.MediaStore
@@ -16,7 +18,9 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.joebuildsthings.frost.data.SessionStore
 import com.joebuildsthings.frost.widget.FrostWidgetProvider
+import java.util.concurrent.Executors
 
 private const val TAG = "FrostService"
 
@@ -26,6 +30,20 @@ class PlaybackService : MediaSessionService() {
     private var exo: ExoPlayer? = null
     private var equalizer: Equalizer? = null
     private var bassBoost: BassBoost? = null
+    private lateinit var sessionStore: SessionStore
+    private val sessionSaveExecutor = Executors.newSingleThreadExecutor()
+    private val sessionSaveHandler = Handler(Looper.getMainLooper())
+    private var destroying = false
+
+    private val sessionSaveRunnable = object : Runnable {
+        override fun run() {
+            val player = exo ?: return
+            saveSession(player)
+            if (!destroying && player.isPlaying) {
+                sessionSaveHandler.postDelayed(this, SESSION_SAVE_INTERVAL_MS)
+            }
+        }
+    }
 
     private val audioAttributes: AudioAttributes = AudioAttributes.Builder()
         .setUsage(C.USAGE_MEDIA)
@@ -45,6 +63,7 @@ class PlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
         val prefs = getSharedPreferences(PlaybackPrefs.FILE, MODE_PRIVATE)
+        sessionStore = SessionStore(this)
         val keep = prefs.getBoolean(PlaybackPrefs.KEEP_PLAYING, true)
         val player = ExoPlayer.Builder(this)
             .setAudioAttributes(audioAttributes, !keep)
@@ -60,6 +79,17 @@ class PlaybackService : MediaSessionService() {
 
             override fun onEvents(player: Player, events: Player.Events) {
                 if (events.containsAny(
+                        Player.EVENT_TIMELINE_CHANGED,
+                        Player.EVENT_MEDIA_ITEM_TRANSITION,
+                        Player.EVENT_POSITION_DISCONTINUITY,
+                        Player.EVENT_IS_PLAYING_CHANGED,
+                        Player.EVENT_PLAY_WHEN_READY_CHANGED,
+                        Player.EVENT_PLAYBACK_STATE_CHANGED
+                    )
+                ) {
+                    saveSession(player)
+                }
+                if (events.containsAny(
                         Player.EVENT_MEDIA_ITEM_TRANSITION,
                         Player.EVENT_IS_PLAYING_CHANGED,
                         Player.EVENT_PLAY_WHEN_READY_CHANGED,
@@ -68,12 +98,44 @@ class PlaybackService : MediaSessionService() {
                 ) {
                     publishWidget(player)
                 }
+                updatePeriodicSessionSave(player)
             }
         })
         attachEffects(player.audioSessionId)
         session = MediaSession.Builder(this, player)
             .setCallback(ResolveCallback())
             .build()
+    }
+
+
+    private fun updatePeriodicSessionSave(player: Player) {
+        sessionSaveHandler.removeCallbacks(sessionSaveRunnable)
+        if (!destroying && player.isPlaying) {
+            sessionSaveHandler.postDelayed(sessionSaveRunnable, SESSION_SAVE_INTERVAL_MS)
+        }
+    }
+
+    private fun saveSession(player: Player) {
+        if (destroying || player.mediaItemCount == 0) return
+
+        val currentIndex = player.currentMediaItemIndex.coerceIn(0, player.mediaItemCount - 1)
+        val start = if (currentIndex >= 1500) currentIndex - 100 else 0
+        val end = minOf(player.mediaItemCount, start + MAX_SAVED_QUEUE_SIZE)
+        val entries = ArrayList<Pair<Int, Long>>(end - start)
+        for (index in start until end) {
+            player.getMediaItemAt(index).mediaId.toLongOrNull()?.let { id ->
+                entries.add(index to id)
+            }
+        }
+        if (entries.isEmpty()) return
+
+        val currentSavedIndex = entries.indexOfFirst { it.first == currentIndex }
+            .takeIf { it >= 0 } ?: 0
+        val ids = entries.map { it.second }
+        val positionMs = player.currentPosition.coerceAtLeast(0L)
+        sessionSaveExecutor.execute {
+            sessionStore.save(ids, currentSavedIndex, positionMs)
+        }
     }
 
     private fun publishWidget(player: Player) {
@@ -148,12 +210,16 @@ class PlaybackService : MediaSessionService() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         val player = session?.player
+        if (player != null) saveSession(player)
         if (player == null || !player.playWhenReady || player.mediaItemCount == 0) {
             stopSelf()
         }
     }
 
     override fun onDestroy() {
+        session?.player?.let { saveSession(it) }
+        destroying = true
+        sessionSaveHandler.removeCallbacks(sessionSaveRunnable)
         getSharedPreferences(PlaybackPrefs.FILE, MODE_PRIVATE)
             .unregisterOnSharedPreferenceChangeListener(prefListener)
         releaseEffects()
@@ -163,6 +229,7 @@ class PlaybackService : MediaSessionService() {
         }
         session = null
         exo = null
+        sessionSaveExecutor.shutdown()
         super.onDestroy()
     }
 }
@@ -186,3 +253,6 @@ private class ResolveCallback : MediaSession.Callback {
         return Futures.immediateFuture(resolved)
     }
 }
+
+private const val SESSION_SAVE_INTERVAL_MS = 10_000L
+private const val MAX_SAVED_QUEUE_SIZE = 2000
