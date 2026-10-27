@@ -69,7 +69,6 @@ class FrostViewModel(app: Application) : AndroidViewModel(app) {
     private var rawTracks: List<Track> = emptyList()
     private var byId: Map<Long, Track> = emptyMap()
     private var sleepJob: Job? = null
-    private var tickJob: Job? = null
     private var restored = false
     private var lastCounted = -1L
 
@@ -149,9 +148,6 @@ class FrostViewModel(app: Application) : AndroidViewModel(app) {
             syncPlayer(player)
             if (events.containsAny(Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_IS_PLAYING_CHANGED)) {
                 noteStarted(player)
-                saveSession()
-            } else if (events.contains(Player.EVENT_TIMELINE_CHANGED)) {
-                saveSession()
             }
         }
     }
@@ -255,19 +251,6 @@ class FrostViewModel(app: Application) : AndroidViewModel(app) {
         speed = player.playbackParameters.speed
         queueIndex = player.currentMediaItemIndex
         current = queue.getOrNull(player.currentMediaItemIndex)
-        if (player.isPlaying) {
-            if (tickJob == null) {
-                tickJob = viewModelScope.launch {
-                    while (true) {
-                        delay(10_000L)
-                        saveSession()
-                    }
-                }
-            }
-        } else {
-            tickJob?.cancel()
-            tickJob = null
-        }
     }
 
     private fun Track.toMediaItem(): MediaItem {
@@ -296,22 +279,6 @@ class FrostViewModel(app: Application) : AndroidViewModel(app) {
         recent = (listOf(t.id) + recent.filter { it != t.id }).take(100)
         plays = plays + (t.id to ((plays[t.id] ?: 0) + 1))
         persist()
-    }
-
-    fun saveSession() {
-        val c = controller ?: return
-        val n = c.mediaItemCount
-        if (n == 0) return
-        val cur = c.currentMediaItemIndex
-        val start = if (cur >= 1500) cur - 100 else 0
-        val end = minOf(n, start + 2000)
-        val ids = ArrayList<Long>(end - start)
-        for (i in start until end) {
-            c.getMediaItemAt(i).mediaId.toLongOrNull()?.let { ids.add(it) }
-        }
-        val index = cur - start
-        val pos = c.currentPosition
-        viewModelScope.launch(ioSerial) { sessionStore.save(ids, index, pos) }
     }
 
     private fun maybeRestore() {
@@ -484,35 +451,48 @@ class FrostViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun togglePlay() {
-        val c = controller ?: return
-        if (c.playWhenReady && c.playbackState != Player.STATE_ENDED) {
-            c.pause()
-        } else if (c.mediaItemCount == 0) {
-            play(tracks, 0)
-        } else {
-            if (c.playbackState == Player.STATE_ENDED) c.seekTo(0, 0L)
-            c.play()
+        withController { c ->
+            if (c.playWhenReady && c.playbackState != Player.STATE_ENDED) {
+                c.pause()
+            } else if (c.mediaItemCount == 0) {
+                val available = tracks
+                if (available.isNotEmpty()) {
+                    c.shuffleModeEnabled = false
+                    c.setMediaItems(available.map { it.toMediaItem() }, 0, 0L)
+                    c.prepare()
+                    c.play()
+                }
+            } else {
+                if (c.playbackState == Player.STATE_ENDED) c.seekTo(0, 0L)
+                c.play()
+            }
         }
     }
 
     fun next() {
-        controller?.seekToNextMediaItem()
+        withController { c -> c.seekToNextMediaItem() }
     }
 
     fun previous() {
-        controller?.seekToPrevious()
+        withController { c ->
+            if (c.hasPreviousMediaItem()) {
+                c.seekToPreviousMediaItem()
+            } else if (c.mediaItemCount > 0) {
+                c.seekTo(0, 0L)
+            }
+        }
     }
 
     fun seekTo(ms: Long) {
-        controller?.seekTo(ms)
+        withController { c -> c.seekTo(ms.coerceAtLeast(0L)) }
     }
 
     fun toggleShuffle() {
-        controller?.let { it.shuffleModeEnabled = !it.shuffleModeEnabled }
+        withController { c -> c.shuffleModeEnabled = !c.shuffleModeEnabled }
     }
 
     fun cycleRepeat() {
-        controller?.let {
+        withController {
             it.repeatMode = when (it.repeatMode) {
                 Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
                 Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
@@ -522,7 +502,7 @@ class FrostViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun cycleSpeed() {
-        controller?.let {
+        withController {
             val order = listOf(1f, 1.25f, 1.5f, 2f, 0.75f)
             val i = order.indexOfFirst { s -> kotlin.math.abs(s - it.playbackParameters.speed) < 0.01f }
             it.setPlaybackSpeed(order[(i + 1) % order.size])
@@ -690,7 +670,6 @@ class FrostViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         sleepJob?.cancel()
-        tickJob?.cancel()
         prefs().unregisterOnSharedPreferenceChangeListener(prefsListener)
         controller?.release()
         ioSerial.close()
