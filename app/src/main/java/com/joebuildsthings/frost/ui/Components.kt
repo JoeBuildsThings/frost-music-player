@@ -88,6 +88,7 @@ import com.joebuildsthings.frost.ui.theme.GlassEdgeStrong
 import com.joebuildsthings.frost.ui.theme.GlassFlat
 import com.joebuildsthings.frost.ui.theme.Ink
 import com.joebuildsthings.frost.ui.theme.InkMuted
+import com.joebuildsthings.frost.ui.theme.PanelSurface
 import com.joebuildsthings.frost.ui.theme.glass
 import com.joebuildsthings.frost.ui.theme.glassFlat
 import kotlinx.coroutines.Dispatchers
@@ -409,7 +410,7 @@ fun GlassDialog(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Un
             Modifier
                 .fillMaxWidth()
                 .clip(shape)
-                .background(Color(0xF7FFFFFF))
+                .background(PanelSurface)
                 .border(1.dp, GlassEdgeStrong, shape)
                 .padding(20.dp),
             content = content

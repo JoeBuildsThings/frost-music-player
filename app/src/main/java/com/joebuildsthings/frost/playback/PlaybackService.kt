@@ -16,6 +16,7 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.joebuildsthings.frost.widget.FrostWidgetProvider
 
 private const val TAG = "FrostService"
 
@@ -56,11 +57,33 @@ class PlaybackService : MediaSessionService() {
             override fun onAudioSessionIdChanged(audioSessionId: Int) {
                 attachEffects(audioSessionId)
             }
+
+            override fun onEvents(player: Player, events: Player.Events) {
+                if (events.containsAny(
+                        Player.EVENT_MEDIA_ITEM_TRANSITION,
+                        Player.EVENT_IS_PLAYING_CHANGED,
+                        Player.EVENT_PLAY_WHEN_READY_CHANGED,
+                        Player.EVENT_MEDIA_METADATA_CHANGED
+                    )
+                ) {
+                    publishWidget(player)
+                }
+            }
         })
         attachEffects(player.audioSessionId)
         session = MediaSession.Builder(this, player)
             .setCallback(ResolveCallback())
             .build()
+    }
+
+    private fun publishWidget(player: Player) {
+        val meta = player.mediaMetadata
+        getSharedPreferences(PlaybackPrefs.FILE, MODE_PRIVATE).edit()
+            .putString(PlaybackPrefs.W_TITLE, meta.title?.toString())
+            .putString(PlaybackPrefs.W_ARTIST, meta.artist?.toString())
+            .putBoolean(PlaybackPrefs.W_PLAYING, player.playWhenReady)
+            .apply()
+        FrostWidgetProvider.push(this)
     }
 
     private fun attachEffects(sessionId: Int) {

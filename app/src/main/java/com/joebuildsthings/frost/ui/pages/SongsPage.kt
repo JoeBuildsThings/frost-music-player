@@ -64,10 +64,18 @@ import com.joebuildsthings.frost.ui.theme.glassFlat
 
 @Composable
 fun SongsPage(vm: FrostViewModel, state: LazyListState, bottomPad: Dp, topPad: Dp) {
-    val tracks = vm.tracks
+    val all = vm.tracks
+    val filter = vm.songFilter
+    val tracks = remember(all, filter, vm.plays, vm.favorites) {
+        when (filter) {
+            1 -> all.filter { (vm.plays[it.id] ?: 0) > 0 }
+            2 -> all.filter { it.id in vm.favorites }
+            else -> all
+        }
+    }
     var menuTrack by remember { mutableStateOf<Track?>(null) }
 
-    if (tracks.isEmpty()) {
+    if (all.isEmpty()) {
         EmptyNote("No songs found", "Add music, then scan again.", "Scan again") { vm.scan() }
     } else {
         LazyColumn(
@@ -75,6 +83,16 @@ fun SongsPage(vm: FrostViewModel, state: LazyListState, bottomPad: Dp, topPad: D
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = topPad, bottom = bottomPad),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            item(key = "filters") {
+                Row(
+                    Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Chip("All", filter == 0) { vm.updateFilter(0) }
+                    Chip("Played", filter == 1) { vm.updateFilter(1) }
+                    Chip("Favorites", filter == 2) { vm.updateFilter(2) }
+                }
+            }
             item(key = "actions") {
                 PlayRow(onPlay = { vm.play(tracks, 0) }, onShuffle = { vm.shuffleAll(tracks) })
             }
@@ -86,6 +104,11 @@ fun SongsPage(vm: FrostViewModel, state: LazyListState, bottomPad: Dp, topPad: D
                     Chip("A to Z", vm.sortMode == 0) { vm.updateSort(0) }
                     Chip("Recent", vm.sortMode == 1) { vm.updateSort(1) }
                     Chip("Artist", vm.sortMode == 2) { vm.updateSort(2) }
+                }
+            }
+            if (tracks.isEmpty()) {
+                item(key = "none") {
+                    Text("Nothing here yet.", color = InkMuted, fontSize = 14.sp, modifier = Modifier.padding(vertical = 20.dp))
                 }
             }
             itemsIndexed(tracks, key = { _, t -> t.id }) { index, track ->

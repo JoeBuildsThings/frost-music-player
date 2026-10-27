@@ -7,6 +7,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
@@ -20,46 +21,73 @@ import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
 
-val BarHazeStyle = HazeStyle(
-    backgroundColor = Color.White,
-    tints = listOf(HazeTint(Color.White.copy(alpha = 0.46f))),
-    blurRadius = 20.dp,
-    noiseFactor = 0.02f,
-    fallbackTint = HazeTint(Color.White.copy(alpha = 0.92f))
-)
+@Composable
+fun barHazeStyle(): HazeStyle {
+    val dark = LocalPalette.current.dark
+    return remember(dark) {
+        val base = if (dark) Color(0xFF0B1220) else Color.White
+        HazeStyle(
+            backgroundColor = base,
+            tints = listOf(HazeTint(base.copy(alpha = if (dark) 0.50f else 0.46f))),
+            blurRadius = 20.dp,
+            noiseFactor = 0.02f,
+            fallbackTint = HazeTint(base.copy(alpha = 0.92f))
+        )
+    }
+}
 
-val PanelHazeStyle = HazeStyle(
-    backgroundColor = Color.White,
-    tints = listOf(HazeTint(Color.White.copy(alpha = 0.34f))),
-    blurRadius = 28.dp,
-    noiseFactor = 0.02f,
-    fallbackTint = HazeTint(Color.White.copy(alpha = 0.88f))
-)
+@Composable
+fun panelHazeStyle(): HazeStyle {
+    val dark = LocalPalette.current.dark
+    return remember(dark) {
+        val base = if (dark) Color(0xFF0B1220) else Color.White
+        HazeStyle(
+            backgroundColor = base,
+            tints = listOf(HazeTint(base.copy(alpha = if (dark) 0.40f else 0.34f))),
+            blurRadius = 28.dp,
+            noiseFactor = 0.02f,
+            fallbackTint = HazeTint(base.copy(alpha = 0.88f))
+        )
+    }
+}
 
-private val RimBrush = Brush.linearGradient(
-    listOf(Color(0xFFFFFFFF), Color(0x33FFFFFF), Color(0x99FFFFFF))
-)
+@Composable
+fun Modifier.glassEdge(shape: Shape): Modifier {
+    val p = LocalPalette.current
+    val mid = p.edgeFade.copy(alpha = p.edgeFade.alpha * 0.4f)
+    return this.border(1.dp, Brush.linearGradient(listOf(p.edgeStrong, mid, p.edgeFade)), shape)
+}
 
-private val SheenBrush = Brush.linearGradient(
-    0f to Color(0x59FFFFFF),
-    0.45f to Color(0x00FFFFFF),
-    1f to Color(0x24FFFFFF)
-)
+@Composable
+private fun sheenBrush(): Brush {
+    val dark = LocalPalette.current.dark
+    return Brush.linearGradient(
+        0f to Color.White.copy(alpha = if (dark) 0.10f else 0.35f),
+        0.45f to Color.White.copy(alpha = 0f),
+        1f to Color.White.copy(alpha = if (dark) 0.04f else 0.14f)
+    )
+}
 
-fun Modifier.glassEdge(shape: Shape): Modifier = this.border(1.dp, RimBrush, shape)
+@Composable
+fun Modifier.glass(shape: Shape = RoundedCornerShape(24.dp)): Modifier {
+    val p = LocalPalette.current
+    return this
+        .shadow(14.dp, shape, ambientColor = p.shadow, spotColor = p.shadow)
+        .clip(shape)
+        .background(Brush.verticalGradient(listOf(p.glassTop, p.glassBottom)))
+        .background(sheenBrush())
+        .glassEdge(shape)
+}
 
-fun Modifier.glass(shape: Shape = RoundedCornerShape(24.dp)): Modifier = this
-    .shadow(14.dp, shape, ambientColor = GlassShadow, spotColor = GlassShadow)
-    .clip(shape)
-    .background(Brush.verticalGradient(listOf(Color(0xC2FFFFFF), Color(0x6BFFFFFF))))
-    .background(SheenBrush)
-    .glassEdge(shape)
-
-fun Modifier.glassFlat(shape: Shape = RoundedCornerShape(20.dp)): Modifier = this
-    .clip(shape)
-    .background(Brush.verticalGradient(listOf(Color(0xB3FFFFFF), Color(0x59FFFFFF))))
-    .background(SheenBrush)
-    .glassEdge(shape)
+@Composable
+fun Modifier.glassFlat(shape: Shape = RoundedCornerShape(20.dp)): Modifier {
+    val p = LocalPalette.current
+    return this
+        .clip(shape)
+        .background(Brush.verticalGradient(listOf(p.flatTop, p.flatBottom)))
+        .background(sheenBrush())
+        .glassEdge(shape)
+}
 
 private fun DrawScope.blob(color: Color, cx: Float, cy: Float, r: Float) {
     val c = Offset(cx, cy)
@@ -72,17 +100,21 @@ private fun DrawScope.blob(color: Color, cx: Float, cy: Float, r: Float) {
 
 @Composable
 fun Modifier.dynamicGlow(colors: List<Color>?): Modifier {
+    val p = LocalPalette.current
     val spec = tween<Color>(durationMillis = 900)
-    val c0 by animateColorAsState(colors?.getOrNull(0) ?: BlobBlue, spec, label = "glow0")
-    val c1 by animateColorAsState(colors?.getOrNull(1) ?: BlobMint, spec, label = "glow1")
-    val c2 by animateColorAsState(colors?.getOrNull(2) ?: BlobPeach, spec, label = "glow2")
-    val c3 by animateColorAsState(colors?.getOrNull(3) ?: BlobSky, spec, label = "glow3")
+    val c0 by animateColorAsState(colors?.getOrNull(0) ?: p.blobBlue, spec, label = "glow0")
+    val c1 by animateColorAsState(colors?.getOrNull(1) ?: p.blobMint, spec, label = "glow1")
+    val c2 by animateColorAsState(colors?.getOrNull(2) ?: p.blobPeach, spec, label = "glow2")
+    val c3 by animateColorAsState(colors?.getOrNull(3) ?: p.blobSky, spec, label = "glow3")
+    val dim = if (p.dark) 0.45f else 1f
+    val top = p.bgTop
+    val bottom = p.bgBottom
     return this
-        .background(Brush.verticalGradient(listOf(BgTop, BgBottom)))
+        .background(Brush.verticalGradient(listOf(top, bottom)))
         .drawBehind {
-            blob(c0, size.width * 0.10f, size.height * 0.08f, size.width * 0.95f)
-            blob(c1, size.width * 0.98f, size.height * 0.42f, size.width * 0.80f)
-            blob(c2, size.width * 0.15f, size.height * 0.70f, size.width * 0.85f)
-            blob(c3, size.width * 0.90f, size.height * 0.96f, size.width * 0.80f)
+            blob(c0.copy(alpha = c0.alpha * dim), size.width * 0.10f, size.height * 0.08f, size.width * 0.95f)
+            blob(c1.copy(alpha = c1.alpha * dim), size.width * 0.98f, size.height * 0.42f, size.width * 0.80f)
+            blob(c2.copy(alpha = c2.alpha * dim), size.width * 0.15f, size.height * 0.70f, size.width * 0.85f)
+            blob(c3.copy(alpha = c3.alpha * dim), size.width * 0.90f, size.height * 0.96f, size.width * 0.80f)
         }
 }

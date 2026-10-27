@@ -140,6 +140,11 @@ fun SettingsScreen(vm: FrostViewModel, bottomPad: Dp, onBack: () -> Unit) {
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = bottomPad),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            item(key = "appearance") {
+                SettingsCard("Appearance") {
+                    SwitchRow("Dark mode", vm.darkMode) { vm.updateDarkMode(it) }
+                }
+            }
             item(key = "playback") {
                 SettingsCard("Playback") {
                     SwitchRow("Keep playing during games", vm.keepPlaying) { vm.updateKeepPlaying(it) }

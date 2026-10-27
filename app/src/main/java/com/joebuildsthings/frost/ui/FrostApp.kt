@@ -52,6 +52,10 @@ import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -90,7 +94,7 @@ import com.joebuildsthings.frost.ui.pages.SongsPage
 import com.joebuildsthings.frost.ui.theme.Accent
 import com.joebuildsthings.frost.ui.theme.AccentTint
 import com.joebuildsthings.frost.ui.theme.ArtPalette
-import com.joebuildsthings.frost.ui.theme.BarHazeStyle
+import com.joebuildsthings.frost.ui.theme.barHazeStyle
 import com.joebuildsthings.frost.ui.theme.Ink
 import com.joebuildsthings.frost.ui.theme.InkMuted
 import com.joebuildsthings.frost.ui.theme.dynamicGlow
@@ -149,7 +153,7 @@ fun FrostApp(vm: FrostViewModel) {
     }
 
     LaunchedEffect(granted) {
-        if (granted) vm.scan()
+        if (granted) vm.loadIfNeeded()
         if (granted && Build.VERSION.SDK_INT >= 33 && !askedNotifications &&
             !hasPermission(context, Manifest.permission.POST_NOTIFICATIONS)
         ) {
@@ -308,6 +312,7 @@ private fun PermissionGate(asked: Boolean, onAllow: () -> Unit, onSettings: () -
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun Shell(
     vm: FrostViewModel,
@@ -334,6 +339,21 @@ private fun Shell(
                 CircularProgressIndicator(color = Accent, strokeWidth = 3.dp, modifier = Modifier.size(28.dp))
             }
         } else {
+            val pullState = rememberPullToRefreshState()
+            PullToRefreshBox(
+                isRefreshing = vm.refreshing,
+                onRefresh = { vm.scan() },
+                state = pullState,
+                indicator = {
+                    PullToRefreshDefaults.Indicator(
+                        state = pullState,
+                        isRefreshing = vm.refreshing,
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = topPad)
+                    )
+                }
+            ) {
             Crossfade(targetState = tab, animationSpec = tween(220), label = "tabs") { t ->
                 when (t) {
                     0 -> SongsPage(vm, songsState, bottomPad, topPad)
@@ -342,6 +362,7 @@ private fun Shell(
                     3 -> FoldersPage(vm, foldersState, bottomPad, topPad, onPush)
                     else -> PlaylistsPage(vm, playlistsState, bottomPad, topPad, onPush)
                 }
+            }
             }
         }
     }
@@ -361,7 +382,7 @@ private fun GlassHeader(
         modifier
             .fillMaxWidth()
             .clip(shape)
-            .hazeEffect(state = hazeState, style = BarHazeStyle)
+            .hazeEffect(state = hazeState, style = barHazeStyle())
             .glassEdge(shape)
     ) {
         Header(title, subtitle, onSearch, onSettings)
@@ -422,7 +443,7 @@ private fun TabBar(selected: Int, hazeState: HazeState, onSelect: (Int) -> Unit)
         Modifier
             .fillMaxWidth()
             .clip(shape)
-            .hazeEffect(state = hazeState, style = BarHazeStyle)
+            .hazeEffect(state = hazeState, style = barHazeStyle())
             .glassEdge(shape)
             .navigationBarsPadding()
             .padding(horizontal = 8.dp, vertical = 8.dp),
@@ -477,7 +498,7 @@ private fun MiniPlayer(vm: FrostViewModel, hazeState: HazeState, padNav: Boolean
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 8.dp)
             .clip(shape)
-            .hazeEffect(state = hazeState, style = BarHazeStyle)
+            .hazeEffect(state = hazeState, style = barHazeStyle())
             .glassEdge(shape)
             .clickable(onClick = onOpen)
             .padding(10.dp),

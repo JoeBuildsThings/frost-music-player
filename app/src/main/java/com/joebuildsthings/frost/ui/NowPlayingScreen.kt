@@ -66,7 +66,8 @@ import com.joebuildsthings.frost.ui.theme.AccentTint
 import com.joebuildsthings.frost.ui.theme.GlassShadow
 import com.joebuildsthings.frost.ui.theme.Ink
 import com.joebuildsthings.frost.ui.theme.InkMuted
-import com.joebuildsthings.frost.ui.theme.PanelHazeStyle
+import com.joebuildsthings.frost.ui.theme.PanelScrim
+import com.joebuildsthings.frost.ui.theme.panelHazeStyle
 import com.joebuildsthings.frost.ui.theme.dynamicGlow
 import com.joebuildsthings.frost.ui.theme.glassEdge
 import com.joebuildsthings.frost.ui.theme.glassFlat
@@ -119,7 +120,7 @@ fun NowPlayingScreen(vm: FrostViewModel, glowColors: List<Color>?, onBack: () ->
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(Color.White.copy(alpha = 0.38f))
+                    .background(PanelScrim)
             )
         }
 
@@ -175,7 +176,7 @@ fun NowPlayingScreen(vm: FrostViewModel, glowColors: List<Color>?, onBack: () ->
                 Modifier
                     .fillMaxWidth()
                     .clip(panelShape)
-                    .hazeEffect(state = hazeState, style = PanelHazeStyle)
+                    .hazeEffect(state = hazeState, style = panelHazeStyle())
                     .glassEdge(panelShape)
                     .padding(horizontal = 20.dp, vertical = 16.dp)
             ) {

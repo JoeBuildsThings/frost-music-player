@@ -63,13 +63,13 @@ class FrostViewModel(app: Application) : AndroidViewModel(app) {
     private val sessionStore = SessionStore(app)
     private val ioSerial = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
     private val userReady = CompletableDeferred<Unit>()
+    private val cacheChecked = CompletableDeferred<Unit>()
     private val pending = ArrayList<(MediaController) -> Unit>()
     private var controller: MediaController? = null
     private var rawTracks: List<Track> = emptyList()
     private var byId: Map<Long, Track> = emptyMap()
     private var sleepJob: Job? = null
     private var tickJob: Job? = null
-    private var observerJob: Job? = null
     private var restored = false
     private var lastCounted = -1L
 
@@ -125,6 +125,10 @@ class FrostViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var keepPlaying by mutableStateOf(true)
         private set
+    var darkMode by mutableStateOf(false)
+        private set
+    var songFilter by mutableStateOf(0)
+        private set
 
     var eqOn by mutableStateOf(false)
         private set
@@ -156,21 +160,11 @@ class FrostViewModel(app: Application) : AndroidViewModel(app) {
         if (key == PlaybackPrefs.EQ_INFO) loadEq()
     }
 
-    private val mediaObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
-        override fun onChange(selfChange: Boolean) {
-            observerJob?.cancel()
-            observerJob = viewModelScope.launch {
-                delay(1500L)
-                scan()
-            }
-        }
-    }
-
     init {
         keepPlaying = prefs().getBoolean(PlaybackPrefs.KEEP_PLAYING, true)
+        darkMode = prefs().getBoolean(PlaybackPrefs.DARK_MODE, false)
         loadEq()
         prefs().registerOnSharedPreferenceChangeListener(prefsListener)
-        app.contentResolver.registerContentObserver(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, true, mediaObserver)
         viewModelScope.launch {
             val data = withContext(Dispatchers.IO) { store.load() }
             favorites = data.favorites
@@ -197,6 +191,7 @@ class FrostViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 maybeRestore()
             }
+            cacheChecked.complete(Unit)
         }
         connect()
     }
@@ -368,6 +363,13 @@ class FrostViewModel(app: Application) : AndroidViewModel(app) {
                 scanned = true
             }
             refreshing = false
+        }
+    }
+
+    fun loadIfNeeded() {
+        viewModelScope.launch {
+            cacheChecked.await()
+            if (!scanned) scan()
         }
     }
 
@@ -556,6 +558,15 @@ class FrostViewModel(app: Application) : AndroidViewModel(app) {
         prefs().edit().putBoolean(PlaybackPrefs.KEEP_PLAYING, enabled).apply()
     }
 
+    fun updateDarkMode(on: Boolean) {
+        darkMode = on
+        prefs().edit().putBoolean(PlaybackPrefs.DARK_MODE, on).apply()
+    }
+
+    fun updateFilter(filter: Int) {
+        songFilter = filter
+    }
+
     // ---------- equalizer ----------
 
     private fun loadEq() {
@@ -680,9 +691,7 @@ class FrostViewModel(app: Application) : AndroidViewModel(app) {
     override fun onCleared() {
         sleepJob?.cancel()
         tickJob?.cancel()
-        observerJob?.cancel()
         prefs().unregisterOnSharedPreferenceChangeListener(prefsListener)
-        getApplication<Application>().contentResolver.unregisterContentObserver(mediaObserver)
         controller?.release()
         ioSerial.close()
         super.onCleared()
