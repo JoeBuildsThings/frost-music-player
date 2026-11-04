@@ -500,7 +500,15 @@ class FrostViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun previous() {
-        controller?.seekToPrevious()
+        val c = controller ?: return
+        if (c.mediaItemCount == 0) return
+        if (c.currentPosition > 3_000L) {
+            c.seekTo(c.currentMediaItemIndex, 0L)
+        } else if (c.hasPreviousMediaItem()) {
+            c.seekToPreviousMediaItem()
+        } else {
+            c.seekTo(c.currentMediaItemIndex, 0L)
+        }
     }
 
     fun seekTo(ms: Long) {
