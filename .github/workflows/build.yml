@@ -3,9 +3,21 @@ name: Build Frost APK
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - "**.md"
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-frost-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  APK_NAME: Frost-Music-Player-v0.6.${{ github.run_number }}.apk
 
 jobs:
   build:
@@ -39,10 +51,23 @@ jobs:
         continue-on-error: true
         run: gradle assembleRelease --no-daemon --stacktrace
 
+      - name: Rename release APK
+        if: steps.release.outcome == 'success'
+        run: cp app/build/outputs/apk/release/app-release.apk "./${APK_NAME}"
+
       - name: Upload release APK
         if: steps.release.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: frost-release
-          path: app/build/outputs/apk/release/app-release.apk
+          path: ${{ env.APK_NAME }}
           retention-days: 30
+
+      - name: Publish APK to GitHub Releases
+        if: github.ref == 'refs/heads/main' && steps.release.outcome == 'success'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.6.${{ github.run_number }}
+          name: Frost Music Player v0.6.${{ github.run_number }}
+          body: "Standalone Android APK (R8-minified, Android 6.0+ / API 23+). Download the APK below and install it on your device."
+          files: ${{ env.APK_NAME }}
