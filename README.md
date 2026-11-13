@@ -112,4 +112,4 @@ Output paths:
 
 ### Author
 
-Built by **Adebiyi Joseph Ayomide** ([@JoeBuildsThings](https://github.com/JoeBuildsThings)).
+Built by **[@JoeBuildsThings](https://github.com/JoeBuildsThings)**.
