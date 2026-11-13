@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <include domain="file" path="frost_user.json" />
+    <include domain="sharedpref" path="frost_prefs.xml" />
+    <exclude domain="file" path="frost_library.json" />
+    <exclude domain="file" path="frost_session.json" />
+</full-backup-content>

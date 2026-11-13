@@ -95,9 +95,15 @@ fun NowPlayingScreen(vm: FrostViewModel, glowColors: List<Color>?, onBack: () ->
 
     LaunchedEffect(Unit) {
         while (true) {
-            if (!scrubbing) position = vm.positionMs()
+            if (!scrubbing) position = vm.positionMs().coerceAtLeast(0L)
             delay(if (vm.isPlaying) 300L else 900L)
         }
+    }
+
+    LaunchedEffect(track?.id) {
+        scrubbing = false
+        scrub = 0f
+        position = vm.positionMs().coerceAtLeast(0L)
     }
 
     val duration = vm.durationMs().takeIf { it > 0L } ?: (track?.durationMs ?: 0L)
@@ -153,19 +159,25 @@ fun NowPlayingScreen(vm: FrostViewModel, glowColors: List<Color>?, onBack: () ->
                     QueueList(vm)
                 } else if (track != null) {
                     val side = minOf(maxWidth, maxHeight)
-                    Art(
-                        track.albumId,
-                        720,
-                        Modifier
-                            .size(side)
-                            .graphicsLayer {
-                                scaleX = artScale
-                                scaleY = artScale
-                            }
-                            .shadow(18.dp, RoundedCornerShape(32.dp), ambientColor = GlassShadow, spotColor = GlassShadow),
-                        32.dp,
-                        72.dp
-                    )
+                    Crossfade(
+                        targetState = track,
+                        animationSpec = tween(320),
+                        label = "album-art"
+                    ) { displayedTrack ->
+                        Art(
+                            displayedTrack.albumId,
+                            720,
+                            Modifier
+                                .size(side)
+                                .graphicsLayer {
+                                    scaleX = artScale
+                                    scaleY = artScale
+                                }
+                                .shadow(18.dp, RoundedCornerShape(32.dp), ambientColor = GlassShadow, spotColor = GlassShadow),
+                            32.dp,
+                            72.dp
+                        )
+                    }
                 } else {
                     Text("Nothing is playing yet.", color = InkMuted, fontSize = 15.sp)
                 }
@@ -198,6 +210,7 @@ fun NowPlayingScreen(vm: FrostViewModel, glowColors: List<Color>?, onBack: () ->
                 Spacer(Modifier.height(4.dp))
                 Slider(
                     value = fraction,
+                    enabled = track != null && duration > 0L,
                     onValueChange = {
                         scrubbing = true
                         scrub = it
@@ -229,30 +242,53 @@ fun NowPlayingScreen(vm: FrostViewModel, glowColors: List<Color>?, onBack: () ->
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     IconCircle(FrostIcons.Shuffle, "Shuffle", { vm.toggleShuffle() }, active = vm.shuffle)
-                    IconButton(onClick = { vm.previous() }, modifier = Modifier.size(56.dp)) {
-                        Icon(FrostIcons.SkipPrevious, contentDescription = "Previous song", tint = Ink, modifier = Modifier.size(34.dp))
+                    IconButton(
+                        onClick = { vm.previous() },
+                        enabled = vm.current != null,
+                        modifier = Modifier.size(56.dp)
+                    ) {
+                        Icon(
+                            FrostIcons.SkipPrevious,
+                            contentDescription = "Previous song",
+                            tint = if (vm.current != null) Ink else InkMuted,
+                            modifier = Modifier.size(34.dp)
+                        )
                     }
+                    val canStartPlayback = vm.current != null || vm.tracks.isNotEmpty()
                     val playSource = remember { MutableInteractionSource() }
                     Box(
                         Modifier
                             .pressScale(playSource)
                             .size(72.dp)
                             .clip(CircleShape)
-                            .background(Accent)
-                            .clickable(interactionSource = playSource, indication = LocalIndication.current) { vm.togglePlay() },
+                            .background(if (canStartPlayback) Accent else AccentTint)
+                            .clickable(
+                                enabled = canStartPlayback,
+                                interactionSource = playSource,
+                                indication = LocalIndication.current
+                            ) { vm.togglePlay() },
                         contentAlignment = Alignment.Center
                     ) {
                         Crossfade(targetState = vm.playWhenReady, animationSpec = tween(180), label = "playpause") { playing ->
                             Icon(
                                 if (playing) FrostIcons.Pause else FrostIcons.Play,
                                 contentDescription = if (playing) "Pause" else "Play",
-                                tint = Color.White,
+                                tint = if (canStartPlayback) Color.White else InkMuted,
                                 modifier = Modifier.size(38.dp)
                             )
                         }
                     }
-                    IconButton(onClick = { vm.next() }, modifier = Modifier.size(56.dp)) {
-                        Icon(FrostIcons.SkipNext, contentDescription = "Next song", tint = Ink, modifier = Modifier.size(34.dp))
+                    IconButton(
+                        onClick = { vm.next() },
+                        enabled = vm.current != null,
+                        modifier = Modifier.size(56.dp)
+                    ) {
+                        Icon(
+                            FrostIcons.SkipNext,
+                            contentDescription = "Next song",
+                            tint = if (vm.current != null) Ink else InkMuted,
+                            modifier = Modifier.size(34.dp)
+                        )
                     }
                     IconCircle(
                         if (vm.repeatMode == Player.REPEAT_MODE_ONE) FrostIcons.RepeatOne else FrostIcons.Repeat,
@@ -318,6 +354,12 @@ private fun SleepButton(vm: FrostViewModel, modifier: Modifier, onClick: () -> U
 @Composable
 private fun QueueList(vm: FrostViewModel) {
     val state = rememberLazyListState(initialFirstVisibleItemIndex = (vm.queueIndex - 2).coerceAtLeast(0))
+    LaunchedEffect(vm.queueIndex, vm.queue.size) {
+        if (vm.queue.isNotEmpty()) {
+            val activeIndex = vm.queueIndex.coerceIn(0, vm.queue.lastIndex)
+            state.animateScrollToItem((activeIndex - 2).coerceAtLeast(0))
+        }
+    }
     if (vm.queue.isEmpty()) {
         Text("The queue is empty.", color = InkMuted, fontSize = 15.sp)
     } else {
@@ -339,6 +381,7 @@ private fun QueueRow(track: Track, active: Boolean, onClick: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .glassFlat(RoundedCornerShape(16.dp))
+            .background(if (active) AccentTint else Color.Transparent, RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically

@@ -36,27 +36,36 @@ jobs:
         with:
           gradle-version: "8.13"
 
-      - name: Build debug APK
+      - name: Decode release keystore
+        if: env.HAS_KEYSTORE == 'true'
+        env:
+          HAS_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' }}
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: echo "$KEYSTORE_BASE64" | base64 -d > app/frost-release.jks
+
+      - name: Build debug APK (PR checks)
+        if: github.event_name == 'pull_request'
         run: gradle assembleDebug --no-daemon --stacktrace
 
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: frost-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 30
-
       - name: Build release APK
-        id: release
-        continue-on-error: true
+        if: github.event_name != 'pull_request'
+        env:
+          KEYSTORE_FILE: frost-release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: gradle assembleRelease --no-daemon --stacktrace
 
+      - name: Clean up release keystore
+        if: always()
+        run: rm -f app/frost-release.jks
+
       - name: Rename release APK
-        if: steps.release.outcome == 'success'
+        if: github.event_name != 'pull_request'
         run: cp app/build/outputs/apk/release/app-release.apk "./${APK_NAME}"
 
-      - name: Upload release APK
-        if: steps.release.outcome == 'success'
+      - name: Upload release APK artifact
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: frost-release
@@ -64,7 +73,7 @@ jobs:
           retention-days: 30
 
       - name: Publish APK to GitHub Releases
-        if: github.ref == 'refs/heads/main' && steps.release.outcome == 'success'
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v0.6.${{ github.run_number }}

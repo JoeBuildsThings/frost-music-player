@@ -1,8 +1,37 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+val runNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 0
+val computedVersionCode = 100 + runNumber
+val computedVersionName = if (runNumber > 0) "0.6.$runNumber" else "0.6.0"
+
+val keystorePropsFile = rootProject.file("keystore.properties")
+val keystoreProps = Properties().apply {
+    if (keystorePropsFile.exists()) {
+        keystorePropsFile.inputStream().use { load(it) }
+    }
+}
+
+val releaseKeystorePath = System.getenv("KEYSTORE_FILE")
+    ?: keystoreProps.getProperty("storeFile")
+    ?: "frost-release.jks"
+val releaseKeystoreFile = file(releaseKeystorePath)
+val releaseStorePassword = System.getenv("KEYSTORE_PASSWORD")
+    ?: keystoreProps.getProperty("storePassword")
+val releaseKeyAlias = System.getenv("KEY_ALIAS")
+    ?: keystoreProps.getProperty("keyAlias")
+val releaseKeyPassword = System.getenv("KEY_PASSWORD")
+    ?: keystoreProps.getProperty("keyPassword")
+
+val hasReleaseSigning = releaseKeystoreFile.exists() &&
+    !releaseStorePassword.isNullOrBlank() &&
+    !releaseKeyAlias.isNullOrBlank() &&
+    !releaseKeyPassword.isNullOrBlank()
 
 android {
     namespace = "com.joebuildsthings.frost"
@@ -12,15 +41,30 @@ android {
         applicationId = "com.joebuildsthings.frost"
         minSdk = 23
         targetSdk = 34
-        versionCode = 6
-        versionName = "0.6.0"
+        versionCode = computedVersionCode
+        versionName = computedVersionName
+    }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = releaseKeystoreFile
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
