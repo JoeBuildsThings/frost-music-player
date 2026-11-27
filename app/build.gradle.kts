@@ -106,9 +106,6 @@ android {
         disable += setOf("GradleDependency", "NewerVersionAvailable", "AndroidGradlePluginVersion")
         xmlReport = true
         htmlReport = true
-        // Print every issue into the CI log, not just the first one.
-        textReport = true
-        textOutput = file("stdout")
     }
 
     testOptions {

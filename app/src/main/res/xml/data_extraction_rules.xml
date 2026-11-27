@@ -1,15 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Only what is listed is backed up. The library cache and the playback session are rebuilt on device. -->
 <data-extraction-rules>
     <cloud-backup>
         <include domain="file" path="frost_user.json" />
         <include domain="sharedpref" path="frost_prefs.xml" />
-        <exclude domain="file" path="frost_library.json" />
-        <exclude domain="file" path="frost_session.json" />
     </cloud-backup>
     <device-transfer>
         <include domain="file" path="frost_user.json" />
         <include domain="sharedpref" path="frost_prefs.xml" />
-        <exclude domain="file" path="frost_library.json" />
-        <exclude domain="file" path="frost_session.json" />
     </device-transfer>
 </data-extraction-rules>
