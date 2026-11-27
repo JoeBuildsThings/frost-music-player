@@ -1,3 +1,6 @@
+# At most one PR per ecosystem per week, so the repo never fills up with branches.
+# Major versions (for example Android Gradle Plugin 9, Haze 2) are ignored here: they need a
+# deliberate migration and a device test, so upgrade them by hand.
 version: 2
 updates:
   - package-ecosystem: gradle
@@ -5,13 +8,19 @@ updates:
     schedule:
       interval: weekly
     groups:
-      androidx:
-        patterns: [ "androidx.*" ]
-      kotlin:
-        patterns: [ "org.jetbrains.kotlin*" ]
-    open-pull-requests-limit: 5
+      gradle-dependencies:
+        patterns: [ "*" ]
+        update-types: [ "minor", "patch" ]
+    ignore:
+      - dependency-name: "*"
+        update-types: [ "version-update:semver-major" ]
+    open-pull-requests-limit: 1
 
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: weekly
+    groups:
+      github-actions:
+        patterns: [ "*" ]
+    open-pull-requests-limit: 1
