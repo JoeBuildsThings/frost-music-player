@@ -58,6 +58,11 @@ android {
         targetSdk = 35
         versionCode = computedVersionCode
         versionName = computedVersionName
+
+        buildConfigField("String", "UPDATE_REPO", "\"JoeBuildsThings/frost-music-player\"")
+        // Frost Pro is planned, not sold. Keep false until the purchase flow exists.
+        val proGating = providers.gradleProperty("frost.proGating").orNull == "true"
+        buildConfigField("boolean", "PRO_GATING", proGating.toString())
     }
 
     signingConfigs {
@@ -91,6 +96,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     lint {
@@ -100,6 +106,9 @@ android {
         disable += setOf("GradleDependency", "NewerVersionAvailable", "AndroidGradlePluginVersion")
         xmlReport = true
         htmlReport = true
+        // Print every issue into the CI log, not just the first one.
+        textReport = true
+        textOutput = file("stdout")
     }
 
     testOptions {

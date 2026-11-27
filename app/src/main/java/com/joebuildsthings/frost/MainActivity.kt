@@ -11,11 +11,14 @@ import androidx.activity.viewModels
 import androidx.compose.runtime.DisposableEffect
 import com.joebuildsthings.frost.playback.PlaybackPrefs
 import com.joebuildsthings.frost.ui.FrostApp
+import com.joebuildsthings.frost.ui.UpdateDialog
 import com.joebuildsthings.frost.ui.theme.FrostTheme
+import com.joebuildsthings.frost.update.UpdateViewModel
 
 class MainActivity : ComponentActivity() {
 
     private val vm: FrostViewModel by viewModels()
+    private val updates: UpdateViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,6 +47,7 @@ class MainActivity : ComponentActivity() {
             }
             FrostTheme(dark = dark) {
                 FrostApp(vm)
+                UpdateDialog(updates)
             }
         }
     }

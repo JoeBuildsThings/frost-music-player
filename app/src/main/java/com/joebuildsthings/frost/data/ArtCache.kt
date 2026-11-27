@@ -9,6 +9,7 @@ import android.os.Build
 import android.provider.MediaStore
 import android.util.LruCache
 import android.util.Size
+import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 
 object ArtCache {
@@ -16,7 +17,8 @@ object ArtCache {
     private val cache = object : LruCache<String, Bitmap>(12 * 1024 * 1024) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
     }
-    private val missing: MutableSet<String> = ConcurrentHashMap.newKeySet<String>()
+    // newKeySet() is API 24 and crashed on Android 6; this is the API 1 equivalent.
+    private val missing: MutableSet<String> = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
 
     private fun key(albumId: Long, px: Int) = "$albumId:$px"
 

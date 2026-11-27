@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Reading the music library. Frost has no INTERNET permission: nothing leaves the device. -->
+    <!-- Only used to check GitHub Releases for app updates. Nothing about the user or library is sent. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Reading the music library -->
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
@@ -20,7 +23,8 @@
         android:allowBackup="true"
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"
-        android:supportsRtl="true">
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="false">
 
         <activity
             android:name=".MainActivity"

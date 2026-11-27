@@ -45,8 +45,9 @@ R8 code minification and resource shrinking keep the release APK compact (~2 MB)
 * **Self-Healing Queue:** Deleted, moved or corrupt files are skipped automatically instead of stalling playback.
 * **Hardware DSP Audio Effects:** Attaches Android's native multi-band `Equalizer` and `BassBoost` directly to the active ExoPlayer audio session ID with persistent user presets.
 * **Playback Controls & Sleep Timer:** Variable playback speed cycling, shuffle, repeat-off / repeat-all / repeat-one, interactive queue jumping, smart previous-track restart (restarts track after 3 seconds of playback), and a sleep timer (15 to 60 minutes or end of the current song) that runs in the playback service, so it keeps working after the app is closed.
+* **In-App Updates:** Frost checks GitHub Releases and offers new versions with Update or Skip. After three missed releases the update becomes required.
 * **Home-Screen Widgets:** A compact 4x1 mini player and a 4x2 **Now Playing** card with album art, artist and album, shuffle, repeat, previous, play/pause and next, all driven through `MediaController` IPC.
-* **Zero Telemetry:** No internet permission, no accounts, no ads, and no tracking. Library caches, playlists, favorites, play counts, and playback positions remain strictly on-device.
+* **Zero Telemetry:** No accounts, no ads, and no tracking. The only network request is an update check against GitHub Releases (at most every 6 hours) that sends nothing about you or your library. Library caches, playlists, favorites, play counts, and playback positions remain strictly on-device.
 
 ---
 

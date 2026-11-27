@@ -39,7 +39,8 @@ jobs:
         uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
 
       - name: Lint, unit tests and debug build
-        run: ./gradlew lintDebug testDebugUnitTest assembleDebug --stacktrace
+        # --continue: one run reports lint, test and compile problems together.
+        run: ./gradlew lintDebug testDebugUnitTest assembleDebug --continue --stacktrace
 
       - name: Upload lint and test reports
         if: always()
@@ -89,13 +90,13 @@ jobs:
           fi
           echo "$KEYSTORE_BASE64" | base64 -d > app/frost-release.jks
 
-      - name: Build signed release APK
+      - name: Build signed release APK and AAB
         env:
           KEYSTORE_FILE: frost-release.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew assembleRelease -Pfrost.requireSigning=true --stacktrace
+        run: ./gradlew assembleRelease bundleRelease -Pfrost.requireSigning=true --stacktrace
 
       - name: Remove release keystore
         if: always()
@@ -106,6 +107,7 @@ jobs:
           APKSIGNER="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner"
           "$APKSIGNER" verify --print-certs app/build/outputs/apk/release/app-release.apk
           cp app/build/outputs/apk/release/app-release.apk "./${APK_NAME}"
+          cp app/build/outputs/bundle/release/app-release.aab "./${APK_NAME%.apk}.aab"
 
       - name: Publish to GitHub Releases
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
@@ -114,4 +116,6 @@ jobs:
           name: Frost Music Player ${{ github.ref_name }}
           generate_release_notes: true
           body: "Standalone Android APK (R8 minified, Android 6.0+ / API 23+). Download the APK below and install it on your device."
-          files: ${{ env.APK_NAME }}
+          files: |
+            ${{ env.APK_NAME }}
+            Frost-Music-Player-${{ github.ref_name }}.aab
