@@ -133,7 +133,7 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.8.0")
     implementation("androidx.media3:media3-session:1.8.0")
     implementation("com.google.guava:guava:33.4.8-android")
-    implementation("dev.chrisbanes.haze:haze:1.7.0")
+    implementation("dev.chrisbanes.haze:haze:2.1.0")
 
     testImplementation("junit:junit:4.13.2")
     // android.jar only has stubs for org.json; the real implementation for JVM tests.
