@@ -2,14 +2,9 @@ package com.joebuildsthings.frost
 
 import android.app.Application
 import android.content.ComponentName
-import android.content.ContentUris
 import android.content.Context
 import android.content.SharedPreferences
-import android.database.ContentObserver
-import android.net.Uri
-import android.os.Handler
-import android.os.Looper
-import android.provider.MediaStore
+import android.os.Bundle
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -18,59 +13,60 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.C
-import androidx.media3.common.MediaItem
-import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.joebuildsthings.frost.data.AlbumItem
 import com.joebuildsthings.frost.data.ArtistItem
 import com.joebuildsthings.frost.data.FolderItem
+import com.joebuildsthings.frost.data.LibraryBuilder
 import com.joebuildsthings.frost.data.LibraryCache
+import com.joebuildsthings.frost.data.LibrarySnapshot
 import com.joebuildsthings.frost.data.MediaStoreRepository
 import com.joebuildsthings.frost.data.Playlist
 import com.joebuildsthings.frost.data.SessionStore
 import com.joebuildsthings.frost.data.Track
 import com.joebuildsthings.frost.data.UserData
 import com.joebuildsthings.frost.data.UserStore
+import com.joebuildsthings.frost.playback.FrostSession
 import com.joebuildsthings.frost.playback.PlaybackPrefs
 import com.joebuildsthings.frost.playback.PlaybackService
+import com.joebuildsthings.frost.playback.toMediaItem
 import java.util.UUID
 import java.util.concurrent.Executors
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private const val TAG = "Frost"
 
-private class Library(
-    val tracks: List<Track>,
-    val albums: List<AlbumItem>,
-    val artists: List<ArtistItem>,
-    val folders: List<FolderItem>,
-    val allFolders: List<FolderItem>
-)
+/** A play counts once this much of a song has been heard, scrobbler style: 30 s or half, whichever is shorter. */
+internal fun playCountThresholdMs(durationMs: Long): Long =
+    if (durationMs <= 0L) 30_000L else minOf(30_000L, durationMs / 2)
 
 class FrostViewModel(app: Application) : AndroidViewModel(app) {
 
     private val store = UserStore(app)
     private val libraryCache = LibraryCache(app)
     private val sessionStore = SessionStore(app)
-    private val ioSerial = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+    /**
+     * Plain executor rather than a coroutine dispatcher on purpose: work queued here still runs
+     * after onCleared, so the last favorite or playlist edit before leaving the app is saved.
+     */
+    private val io = Executors.newSingleThreadExecutor()
     private val userReady = CompletableDeferred<Unit>()
     private val cacheChecked = CompletableDeferred<Unit>()
     private val pending = ArrayList<(MediaController) -> Unit>()
     private var controller: MediaController? = null
     private var rawTracks: List<Track> = emptyList()
     private var byId: Map<Long, Track> = emptyMap()
-    private var sleepJob: Job? = null
     private var restored = false
-    private var lastCounted = -1L
+    private var countJob: Job? = null
+    private var countedCurrent = false
 
     var tracks by mutableStateOf<List<Track>>(emptyList())
         private set
@@ -122,7 +118,7 @@ class FrostViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var sleepMinutes by mutableStateOf(0)
         private set
-    var keepPlaying by mutableStateOf(true)
+    var keepPlaying by mutableStateOf(PlaybackPrefs.KEEP_PLAYING_DEFAULT)
         private set
     var darkMode by mutableStateOf(false)
         private set
@@ -146,10 +142,19 @@ class FrostViewModel(app: Application) : AndroidViewModel(app) {
         override fun onEvents(player: Player, events: Player.Events) {
             if (events.contains(Player.EVENT_TIMELINE_CHANGED)) rebuildQueue(player)
             syncPlayer(player)
+            if (events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)) {
+                // Also fires on Repeat One loops, so replays count again.
+                countJob?.cancel()
+                countedCurrent = false
+            }
             if (events.containsAny(Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_IS_PLAYING_CHANGED)) {
-                noteStarted(player)
+                watchForPlayCount(player)
             }
         }
+    }
+
+    private val controllerListener = object : MediaController.Listener {
+        override fun onExtrasChanged(controller: MediaController, extras: Bundle) = readSleep(extras)
     }
 
     private val prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
@@ -157,7 +162,7 @@ class FrostViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     init {
-        keepPlaying = prefs().getBoolean(PlaybackPrefs.KEEP_PLAYING, true)
+        keepPlaying = prefs().getBoolean(PlaybackPrefs.KEEP_PLAYING, PlaybackPrefs.KEEP_PLAYING_DEFAULT)
         darkMode = prefs().getBoolean(PlaybackPrefs.DARK_MODE, false)
         loadEq()
         prefs().registerOnSharedPreferenceChangeListener(prefsListener)
@@ -179,7 +184,7 @@ class FrostViewModel(app: Application) : AndroidViewModel(app) {
                 val ex = excluded
                 val min = minSeconds
                 val sort = sortMode
-                applyLibrary(withContext(Dispatchers.Default) { buildLibrary(cached, ex, min, sort) })
+                applyLibrary(withContext(Dispatchers.Default) { LibraryBuilder.build(cached, ex, min, sort) })
                 scanned = true
                 controller?.let {
                     rebuildQueue(it)
@@ -198,7 +203,9 @@ class FrostViewModel(app: Application) : AndroidViewModel(app) {
     private fun connect() {
         val app = getApplication<Application>()
         val token = SessionToken(app, ComponentName(app, PlaybackService::class.java))
-        val future = MediaController.Builder(app, token).buildAsync()
+        val future = MediaController.Builder(app, token)
+            .setListener(controllerListener)
+            .buildAsync()
         future.addListener({
             try {
                 val c = future.get()
@@ -206,6 +213,7 @@ class FrostViewModel(app: Application) : AndroidViewModel(app) {
                 c.addListener(playerListener)
                 rebuildQueue(c)
                 syncPlayer(c)
+                readSleep(c.sessionExtras)
                 pending.forEach { it(c) }
                 pending.clear()
                 maybeRestore()
@@ -235,8 +243,7 @@ class FrostViewModel(app: Application) : AndroidViewModel(app) {
                     albumId = 0L,
                     trackNo = 0,
                     durationMs = 0L,
-                    folder = "",
-                    uri = Uri.EMPTY
+                    folder = ""
                 )
             )
         }
@@ -253,29 +260,28 @@ class FrostViewModel(app: Application) : AndroidViewModel(app) {
         current = queue.getOrNull(player.currentMediaItemIndex)
     }
 
-    private fun Track.toMediaItem(): MediaItem {
-        val meta = MediaMetadata.Builder()
-            .setTitle(title)
-            .setArtist(artist)
-            .setAlbumTitle(album)
-        if (albumId > 0L) {
-            meta.setArtworkUri(
-                ContentUris.withAppendedId(Uri.parse("content://media/external/audio/albumart"), albumId)
-            )
-        }
-        return MediaItem.Builder()
-            .setMediaId(id.toString())
-            .setMediaMetadata(meta.build())
-            .build()
-    }
-
     // ---------- history and session ----------
 
-    private fun noteStarted(player: Player) {
-        if (!player.isPlaying) return
-        val t = queue.getOrNull(player.currentMediaItemIndex) ?: return
-        if (t.id < 0L || t.id == lastCounted) return
-        lastCounted = t.id
+    /** Counts a play once the threshold has actually been heard, not the moment a song starts. */
+    private fun watchForPlayCount(player: Player) {
+        if (countedCurrent || !player.isPlaying || countJob?.isActive == true) return
+        countJob = viewModelScope.launch {
+            while (true) {
+                delay(1_000L)
+                val c = controller ?: return@launch
+                if (!c.isPlaying) return@launch
+                val t = queue.getOrNull(c.currentMediaItemIndex) ?: return@launch
+                if (c.currentPosition >= playCountThresholdMs(durationMs())) {
+                    countedCurrent = true
+                    notePlayed(t)
+                    return@launch
+                }
+            }
+        }
+    }
+
+    private fun notePlayed(t: Track) {
+        if (t.id < 0L) return
         recent = (listOf(t.id) + recent.filter { it != t.id }).take(100)
         plays = plays + (t.id to ((plays[t.id] ?: 0) + 1))
         persist()
@@ -318,13 +324,13 @@ class FrostViewModel(app: Application) : AndroidViewModel(app) {
                 val ex = excluded
                 val min = minSeconds
                 val sort = sortMode
-                applyLibrary(withContext(Dispatchers.Default) { buildLibrary(raw, ex, min, sort) })
+                applyLibrary(withContext(Dispatchers.Default) { LibraryBuilder.build(raw, ex, min, sort) })
                 controller?.let {
                     rebuildQueue(it)
                     syncPlayer(it)
                 }
                 scanned = true
-                withContext(ioSerial) { libraryCache.save(raw) }
+                io.execute { libraryCache.save(raw) }
                 maybeRestore()
             } else if (raw == null && !scanned) {
                 scanned = true
@@ -345,53 +351,16 @@ class FrostViewModel(app: Application) : AndroidViewModel(app) {
         val min = minSeconds
         val sort = sortMode
         viewModelScope.launch {
-            applyLibrary(withContext(Dispatchers.Default) { buildLibrary(rawTracks, ex, min, sort) })
+            applyLibrary(withContext(Dispatchers.Default) { LibraryBuilder.build(rawTracks, ex, min, sort) })
         }
     }
 
-    private fun applyLibrary(lib: Library) {
+    private fun applyLibrary(lib: LibrarySnapshot) {
         tracks = lib.tracks
         albums = lib.albums
         artists = lib.artists
         folders = lib.folders
         allFolders = lib.allFolders
-    }
-
-    private fun buildLibrary(raw: List<Track>, excluded: Set<String>, minSeconds: Int, sort: Int): Library {
-        val minMs = minSeconds * 1000L
-        val filtered = raw.filter { it.durationMs >= minMs && it.folder !in excluded }
-        val kept = when (sort) {
-            1 -> filtered.sortedByDescending { it.addedAt }
-            2 -> filtered.sortedWith(compareBy<Track>({ it.artist.lowercase() }, { it.title.lowercase() }))
-            else -> filtered.sortedBy { it.title.lowercase() }
-        }
-
-        val albums = kept.groupBy { it.albumId }.map { (id, list) ->
-            val sorted = list.sortedWith(compareBy<Track>({ it.trackNo }, { it.title.lowercase() }))
-            val names = sorted.map { it.artist }.distinct()
-            AlbumItem(id, sorted.first().album, if (names.size > 1) "Various artists" else names.first(), sorted)
-        }.sortedBy { it.name.lowercase() }
-
-        val artists = kept.groupBy { it.artist }.map { (name, list) ->
-            ArtistItem(name, list.map { it.albumId }.distinct().size, list)
-        }.sortedBy { it.name.lowercase() }
-
-        fun folderItems(src: List<Track>): List<FolderItem> =
-            src.groupBy { it.folder }.map { (path, list) ->
-                FolderItem(
-                    path,
-                    path.substringAfterLast('/').ifEmpty { "Root" },
-                    list.sortedBy { it.title.lowercase() }
-                )
-            }.sortedBy { it.name.lowercase() }
-
-        return Library(
-            kept,
-            albums,
-            artists,
-            folderItems(kept),
-            folderItems(raw.filter { it.durationMs >= minMs })
-        )
     }
 
     // ---------- playback ----------
@@ -463,7 +432,11 @@ class FrostViewModel(app: Application) : AndroidViewModel(app) {
                     c.play()
                 }
             } else {
-                if (c.playbackState == Player.STATE_ENDED) c.seekTo(0, 0L)
+                when (c.playbackState) {
+                    // After an error the player sits idle and play() alone does nothing.
+                    Player.STATE_IDLE -> c.prepare()
+                    Player.STATE_ENDED -> c.seekTo(0, 0L)
+                }
                 c.play()
             }
         }
@@ -519,21 +492,24 @@ class FrostViewModel(app: Application) : AndroidViewModel(app) {
         return if (d == C.TIME_UNSET || d < 0L) 0L else d
     }
 
+    /** The timer runs in PlaybackService so it keeps working after the app is closed. */
     fun setSleepTimer(minutes: Int) {
-        sleepJob?.cancel()
         sleepMinutes = minutes
-        if (minutes <= 0) {
-            sleepEndsAt = 0L
-            return
+        sleepEndsAt = if (minutes > 0) System.currentTimeMillis() + minutes * 60_000L else 0L
+        withController { c ->
+            c.sendCustomCommand(
+                FrostSession.SET_SLEEP,
+                Bundle().apply { putInt(FrostSession.ARG_MINUTES, minutes) }
+            )
         }
-        val ms = minutes * 60_000L
-        sleepEndsAt = System.currentTimeMillis() + ms
-        sleepJob = viewModelScope.launch {
-            delay(ms)
-            controller?.pause()
-            sleepEndsAt = 0L
-            sleepMinutes = 0
-        }
+    }
+
+    val sleepEndOfTrack: Boolean
+        get() = sleepMinutes == FrostSession.SLEEP_END_OF_TRACK
+
+    private fun readSleep(extras: Bundle) {
+        sleepEndsAt = extras.getLong(FrostSession.EXTRA_SLEEP_END_AT, 0L)
+        sleepMinutes = extras.getInt(FrostSession.EXTRA_SLEEP_MINUTES, 0)
     }
 
     fun updateKeepPlaying(enabled: Boolean) {
@@ -668,14 +644,15 @@ class FrostViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun persist() {
         val snapshot = UserData(favorites, playlists, excluded, minSeconds, recent, plays, sortMode)
-        viewModelScope.launch(ioSerial) { store.save(snapshot) }
+        io.execute { store.save(snapshot) }
     }
 
     override fun onCleared() {
-        sleepJob?.cancel()
+        countJob?.cancel()
         prefs().unregisterOnSharedPreferenceChangeListener(prefsListener)
         controller?.release()
-        ioSerial.close()
+        // shutdown lets already queued saves finish.
+        io.shutdown()
         super.onCleared()
     }
 }

@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">Frost</string>
+    <string name="widget_compact_label">Frost mini player</string>
+    <string name="widget_compact_description">Song title with previous, play and next.</string>
+    <string name="widget_large_label">Frost now playing</string>
+    <string name="widget_large_description">Album art, song details, shuffle, repeat and playback controls.</string>
 </resources>

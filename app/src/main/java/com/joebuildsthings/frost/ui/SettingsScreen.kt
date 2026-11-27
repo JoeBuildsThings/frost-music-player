@@ -147,7 +147,7 @@ fun SettingsScreen(vm: FrostViewModel, bottomPad: Dp, onBack: () -> Unit) {
             }
             item(key = "playback") {
                 SettingsCard("Playback") {
-                    SwitchRow("Keep playing during games", vm.keepPlaying) { vm.updateKeepPlaying(it) }
+                    SwitchRow("Keep playing during games (still pauses for calls)", vm.keepPlaying) { vm.updateKeepPlaying(it) }
                     GhostButton("Battery settings", { openBatterySettings(context) }, Modifier.fillMaxWidth())
                 }
             }

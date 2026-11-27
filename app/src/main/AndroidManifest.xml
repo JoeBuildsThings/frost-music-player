@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Permissions for reading audio files -->
+    <!-- Reading the music library. Frost has no INTERNET permission: nothing leaves the device. -->
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
     
-    <!-- Permissions for background playback (will be used in a later phase) -->
+    <!-- Background playback through a media session foreground service -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -32,7 +32,9 @@
             </intent-filter>
         </activity>
 
-            <service
+        <!-- Exported because system UI, Bluetooth and the widgets connect to it as media controllers.
+             PlaybackService only accepts MediaStore ids, never caller supplied URIs. -->
+        <service
             android:name=".playback.PlaybackService"
             android:exported="true"
             android:foregroundServiceType="mediaPlayback">
@@ -40,15 +42,28 @@
                 <action android:name="androidx.media3.session.MediaSessionService" />
             </intent-filter>
         </service>
-            <receiver
+        <receiver
             android:name=".widget.FrostWidgetProvider"
-            android:exported="false">
+            android:exported="false"
+            android:label="@string/widget_compact_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/frost_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.FrostWidgetLargeProvider"
+            android:exported="false"
+            android:label="@string/widget_large_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/frost_widget_large_info" />
         </receiver>
     </application>
 </manifest>

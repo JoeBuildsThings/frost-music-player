@@ -1,6 +1,8 @@
 package com.joebuildsthings.frost.data
 
+import android.content.ContentUris
 import android.net.Uri
+import android.provider.MediaStore
 import androidx.compose.runtime.Immutable
 
 @Immutable
@@ -13,9 +15,12 @@ data class Track(
     val trackNo: Int,
     val durationMs: Long,
     val folder: String,
-    val uri: Uri,
     val addedAt: Long = 0L
-)
+) {
+    /** Derived from the id, so it never goes stale and stays out of equals and hashCode. */
+    val uri: Uri
+        get() = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
+}
 
 @Immutable
 data class AlbumItem(val id: Long, val name: String, val artist: String, val tracks: List<Track>)

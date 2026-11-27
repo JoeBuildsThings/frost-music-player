@@ -1,28 +1,24 @@
 package com.joebuildsthings.frost.data
 
-import android.content.ContentUris
 import android.content.Context
-import android.provider.MediaStore
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
-class LibraryCache(context: Context) {
+class LibraryCache(private val file: File) {
 
-    private val file = File(context.filesDir, "frost_library.json")
+    constructor(context: Context) : this(File(context.filesDir, FILE_NAME))
 
     fun load(): List<Track>? {
-        if (!file.exists()) return null
+        val text = file.readTextAtomically() ?: return null
         return try {
-            val arr = JSONArray(file.readText())
-            val base = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+            val arr = JSONArray(text)
             val out = ArrayList<Track>(arr.length())
             for (i in 0 until arr.length()) {
                 val o = arr.getJSONObject(i)
-                val id = o.getLong("id")
                 out.add(
                     Track(
-                        id = id,
+                        id = o.getLong("id"),
                         title = o.getString("t"),
                         artist = o.getString("a"),
                         album = o.getString("al"),
@@ -30,7 +26,6 @@ class LibraryCache(context: Context) {
                         trackNo = o.getInt("n"),
                         durationMs = o.getLong("d"),
                         folder = o.getString("f"),
-                        uri = ContentUris.withAppendedId(base, id),
                         addedAt = o.optLong("da", 0L)
                     )
                 )
@@ -41,6 +36,7 @@ class LibraryCache(context: Context) {
         }
     }
 
+    @Synchronized
     fun save(tracks: List<Track>) {
         val arr = JSONArray()
         tracks.forEach { t ->
@@ -57,11 +53,10 @@ class LibraryCache(context: Context) {
                     .put("da", t.addedAt)
             )
         }
-        val tmp = File(file.parentFile, file.name + ".tmp")
-        tmp.writeText(arr.toString())
-        if (!tmp.renameTo(file)) {
-            file.writeText(arr.toString())
-            tmp.delete()
-        }
+        file.writeTextAtomically(arr.toString())
+    }
+
+    companion object {
+        const val FILE_NAME = "frost_library.json"
     }
 }

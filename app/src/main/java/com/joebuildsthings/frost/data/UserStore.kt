@@ -15,16 +15,16 @@ class UserData(
     val sortMode: Int
 )
 
-class UserStore(context: Context) {
+class UserStore(private val file: File) {
 
-    private val file = File(context.filesDir, "frost_user.json")
+    constructor(context: Context) : this(File(context.filesDir, FILE_NAME))
 
     private fun defaults() = UserData(emptySet(), emptyList(), emptySet(), 30, emptyList(), emptyMap(), 0)
 
     fun load(): UserData {
-        if (!file.exists()) return defaults()
+        val text = file.readTextAtomically() ?: return defaults()
         return try {
-            val root = JSONObject(file.readText())
+            val root = JSONObject(text)
             val favorites = LinkedHashSet<Long>()
             root.optJSONArray("favorites")?.let { a ->
                 for (i in 0 until a.length()) favorites.add(a.getLong(i))
@@ -67,6 +67,7 @@ class UserStore(context: Context) {
         }
     }
 
+    @Synchronized
     fun save(data: UserData) {
         val root = JSONObject()
         root.put("favorites", JSONArray(data.favorites.toList()))
@@ -87,11 +88,10 @@ class UserStore(context: Context) {
         root.put("playlists", lists)
         root.put("minSeconds", data.minSeconds)
         root.put("sort", data.sortMode)
-        val tmp = File(file.parentFile, file.name + ".tmp")
-        tmp.writeText(root.toString())
-        if (!tmp.renameTo(file)) {
-            file.writeText(root.toString())
-            tmp.delete()
-        }
+        file.writeTextAtomically(root.toString())
+    }
+
+    companion object {
+        const val FILE_NAME = "frost_user.json"
     }
 }

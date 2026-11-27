@@ -79,6 +79,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.joebuildsthings.frost.FrostViewModel
+import com.joebuildsthings.frost.playback.FrostSession
 import com.joebuildsthings.frost.data.ArtCache
 import com.joebuildsthings.frost.data.Track
 import com.joebuildsthings.frost.ui.theme.Accent
@@ -573,7 +574,14 @@ fun Chip(label: String, selected: Boolean, onClick: () -> Unit) {
 
 @Composable
 fun SleepChips(vm: FrostViewModel) {
-    val options = listOf(0 to "Off", 15 to "15 min", 30 to "30 min", 45 to "45 min", 60 to "60 min")
+    val options = listOf(
+        0 to "Off",
+        FrostSession.SLEEP_END_OF_TRACK to "End of song",
+        15 to "15 min",
+        30 to "30 min",
+        45 to "45 min",
+        60 to "60 min"
+    )
     Row(
         Modifier.horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp)

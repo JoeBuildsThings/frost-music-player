@@ -337,7 +337,9 @@ fun NowPlayingScreen(vm: FrostViewModel, glowColors: List<Color>?, onBack: () ->
 @Composable
 private fun SleepButton(vm: FrostViewModel, modifier: Modifier, onClick: () -> Unit) {
     val end = vm.sleepEndsAt
-    if (end == 0L) {
+    if (vm.sleepEndOfTrack) {
+        GhostButton("After this song", onClick, modifier, FrostIcons.Timer)
+    } else if (end == 0L) {
         GhostButton("Sleep timer", onClick, modifier, FrostIcons.Timer)
     } else {
         val now by produceState(System.currentTimeMillis(), end) {
@@ -414,7 +416,9 @@ private fun speedLabel(s: Float): String =
 @Composable
 private fun SleepCircle(vm: FrostViewModel, onClick: () -> Unit) {
     val end = vm.sleepEndsAt
-    if (end == 0L) {
+    if (vm.sleepEndOfTrack) {
+        TextCircle("End", onClick, active = true)
+    } else if (end == 0L) {
         IconCircle(FrostIcons.Timer, "Sleep timer", onClick)
     } else {
         val now by produceState(System.currentTimeMillis(), end) {
